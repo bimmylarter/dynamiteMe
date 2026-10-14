@@ -1,0 +1,637 @@
+[
+ {
+  "site": "0x140ffa9ff",
+  "func": "0x140ffa625",
+  "off": 986,
+  "section": ".data",
+  "name": "PATCHFN_0",
+  "chunk": "0x140ffa625",
+  "new_fn": "0x140ff9e85",
+  "new_site": "0x140ffa25f",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "7407 je 0x140ffaa08",
+   "8bc6 mov eax, esi",
+   "e904060000 jmp 0x140ffb00c",
+   "807c243100 cmp byte ptr [rsp + 0x31], 0"
+  ],
+  "new_ins": [
+   "7407 je 0x140ffa268",
+   "8bc6 mov eax, esi",
+   "e904060000 jmp 0x140ffa86c",
+   "807c243100 cmp byte ptr [rsp + 0x31], 0"
+  ]
+ },
+ {
+  "site": "0x141378209",
+  "func": "0x1413781a0",
+  "off": 105,
+  "section": ".data",
+  "name": "PATCHFN_1",
+  "chunk": "0x1413781a0",
+  "new_fn": "0x141376f90",
+  "new_site": "0x141376ff9",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "745c je 0x141378267",
+   "f6c108 test cl, 8",
+   "7557 jne 0x141378267",
+   "b800020000 mov eax, 0x200"
+  ],
+  "new_ins": [
+   "745c je 0x141377057",
+   "f6c108 test cl, 8",
+   "7557 jne 0x141377057",
+   "b800020000 mov eax, 0x200"
+  ]
+ },
+ {
+  "site": "0x149f57ac7",
+  "func": "0x149f57aa0",
+  "off": 39,
+  "section": ".text",
+  "name": "PATCHFN_2",
+  "chunk": "0x149f57aa0",
+  "new_fn": "0x141373800",
+  "new_site": "0x141373827",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "741a je 0x149f57ae3",
+   "410fb7809e010000 movzx eax, word ptr [r8 + 0x19e]",
+   "a804 test al, 4",
+   "7447 je 0x149f57b1c"
+  ],
+  "new_ins": [
+   "741a je 0x141373843",
+   "410fb7809e010000 movzx eax, word ptr [r8 + 0x19e]",
+   "a804 test al, 4",
+   "7447 je 0x14137387c"
+  ]
+ },
+ {
+  "site": "0x1417a200e",
+  "func": "0x1417a1c00",
+  "off": 1038,
+  "section": ".data",
+  "name": "PATCHFN_3",
+  "chunk": "0x1417a1c00",
+  "new_fn": "0x1417a12b0",
+  "new_site": "0x1417a16be",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 2,
+  "old_ins": [
+   "7419 je 0x1417a2029",
+   "f30f101574529000 movss xmm2, dword ptr [rip + 0x905274]",
+   "0f28ce movaps xmm1, xmm6",
+   "488bcb mov rcx, rbx"
+  ],
+  "new_ins": [
+   "7419 je 0x1417a16d9",
+   "f30f1015045c9000 movss xmm2, dword ptr [rip + 0x905c04]",
+   "0f28ce movaps xmm1, xmm6",
+   "488bcb mov rcx, rbx"
+  ]
+ },
+ {
+  "site": "0x14133d9cb",
+  "func": "0x14133d920",
+  "off": 171,
+  "section": ".data",
+  "name": "PATCHFN_4",
+  "chunk": "0x14133d920",
+  "new_fn": "0x14133c900",
+  "new_site": "0x14133c9ab",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "0f84dc030000 je 0x14133ddad",
+   "e81a1a8cff call 0x140bff3f0",
+   "488b4808 mov rcx, qword ptr [rax + 8]",
+   "488b01 mov rax, qword ptr [rcx]"
+  ],
+  "new_ins": [
+   "0f84dc030000 je 0x14133cd8d",
+   "e89a268cff call 0x140bff050",
+   "488b4808 mov rcx, qword ptr [rax + 8]",
+   "488b01 mov rax, qword ptr [rcx]"
+  ]
+ },
+ {
+  "site": "0x140ebcfc4",
+  "func": "0x140ebcf80",
+  "off": 68,
+  "section": ".data",
+  "name": "PATCHFN_5",
+  "chunk": "0x140ebcf80",
+  "new_fn": "0x140ebcd00",
+  "new_site": "0x140ebcd44",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 4,
+  "old_ins": [
+   "742e je 0x140ebcff4",
+   "8bc5 mov eax, ebp",
+   "48c1e004 shl rax, 4",
+   "48034728 add rax, qword ptr [rdi + 0x28]"
+  ],
+  "new_ins": [
+   "742e je 0x140ebcd74",
+   "8bc5 mov eax, ebp",
+   "48c1e004 shl rax, 4",
+   "48034728 add rax, qword ptr [rdi + 0x28]"
+  ]
+ },
+ {
+  "site": "0x140887905",
+  "func": "0x140887720",
+  "off": 485,
+  "section": ".data",
+  "name": "PATCHFN_6",
+  "chunk": "0x140887720",
+  "new_fn": "0x140887f70",
+  "new_site": "0x140888155",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "741c je 0x140887923",
+   "488b0de2823602 mov rcx, qword ptr [rip + 0x23682e2]",
+   "e86de2f4ff call 0x1407d5b80",
+   "4533c9 xor r9d, r9d"
+  ],
+  "new_ins": [
+   "741c je 0x140888173",
+   "488b0da27a3602 mov rcx, qword ptr [rip + 0x2367aa2]",
+   "e8cde6f4ff call 0x1407d6830",
+   "4533c9 xor r9d, r9d"
+  ]
+ },
+ {
+  "site": "0x1416026ce",
+  "func": "0x141602555",
+  "off": 377,
+  "section": ".data",
+  "name": "PATCHFN_7",
+  "chunk": "0x141602555",
+  "new_fn": "0x1416013d5",
+  "new_site": "0x14160154e",
+  "score": 13,
+  "max_score": 13,
+  "second_score": null,
+  "old_ins": [
+   "ff9068030000 call qword ptr [rax + 0x368]",
+   "488b8ea8010000 mov rcx, qword ptr [rsi + 0x1a8]",
+   "488b01 mov rax, qword ptr [rcx]",
+   "ff9000030000 call qword ptr [rax + 0x300]"
+  ],
+  "new_ins": [
+   "ff9068030000 call qword ptr [rax + 0x368]",
+   "488b8ea8010000 mov rcx, qword ptr [rsi + 0x1a8]",
+   "488b01 mov rax, qword ptr [rcx]",
+   "ff9000030000 call qword ptr [rax + 0x300]"
+  ]
+ },
+ {
+  "site": "0x144e42a62",
+  "func": "0x144e42a10",
+  "off": 82,
+  "section": ".text",
+  "name": "PATCHFN_8",
+  "chunk": "0x144e42a10",
+  "new_fn": "0x140587e70",
+  "new_site": "0x140587ec3",
+  "score": 13,
+  "max_score": 13,
+  "second_score": null,
+  "old_ins": [
+   "0f94d0 sete al",
+   "4883c420 add rsp, 0x20",
+   "5b pop rbx",
+   "c3 ret "
+  ],
+  "new_ins": [
+   "0f94c0 sete al",
+   "4883c420 add rsp, 0x20",
+   "5b pop rbx",
+   "c3 ret "
+  ]
+ },
+ {
+  "site": "0x144e42a8e",
+  "func": "0x144e42a10",
+  "off": 126,
+  "section": ".text",
+  "name": "PATCHFN_9",
+  "chunk": "0x144e42a10",
+  "new_fn": "0x140587e70",
+  "new_site": "0x140587eef",
+  "score": 11,
+  "max_score": 13,
+  "second_score": 11,
+  "old_ins": [
+   "30c0 xor al, al",
+   "4883c420 add rsp, 0x20",
+   "5b pop rbx",
+   "c3 ret "
+  ],
+  "new_ins": [
+   "32c0 xor al, al",
+   "4883c420 add rsp, 0x20",
+   "5b pop rbx",
+   "c3 ret "
+  ]
+ },
+ {
+  "site": "0x144e46f45",
+  "func": "0x144e46ed0",
+  "off": 117,
+  "section": ".text",
+  "name": "PATCHFN_10",
+  "chunk": "0x144e46ed0",
+  "new_fn": "0x140588850",
+  "new_site": "0x1405888c6",
+  "score": 11,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "30c0 xor al, al",
+   "4883c420 add rsp, 0x20",
+   "5b pop rbx",
+   "c3 ret "
+  ],
+  "new_ins": [
+   "32c0 xor al, al",
+   "4883c420 add rsp, 0x20",
+   "5b pop rbx",
+   "c3 ret "
+  ]
+ },
+ {
+  "site": "0x14625fd1a",
+  "func": "0x14625fcc0",
+  "off": 90,
+  "section": ".text",
+  "name": "PATCHFN_11",
+  "chunk": "0x14625fcc0",
+  "new_fn": "0x1409c1710",
+  "new_site": "0x1409c176a",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 6,
+  "old_ins": [
+   "750d jne 0x14625fd29",
+   "b001 mov al, 1",
+   "488b5c2430 mov rbx, qword ptr [rsp + 0x30]",
+   "4883c420 add rsp, 0x20"
+  ],
+  "new_ins": [
+   "750d jne 0x1409c1779",
+   "b001 mov al, 1",
+   "488b5c2430 mov rbx, qword ptr [rsp + 0x30]",
+   "4883c420 add rsp, 0x20"
+  ]
+ },
+ {
+  "site": "0x1459b60b5",
+  "func": "0x1459b60b0",
+  "off": 5,
+  "section": ".text",
+  "name": "PATCHFN_12",
+  "chunk": "0x1459b60b0",
+  "new_fn": "0x1407debf0",
+  "new_site": "0x1407debf6",
+  "score": 9,
+  "max_score": 9,
+  "second_score": 1,
+  "old_ins": [
+   "4883795800 cmp qword ptr [rcx + 0x58], 0",
+   "4889cb mov rbx, rcx",
+   "7509 jne 0x1459b60c8",
+   "e81c66e5fa call 0x14080c6e0"
+  ],
+  "new_ins": [
+   "4883795800 cmp qword ptr [rcx + 0x58], 0",
+   "488bd9 mov rbx, rcx",
+   "7509 jne 0x1407dec09",
+   "e89be60200 call 0x14080d2a0"
+  ]
+ },
+ {
+  "site": "0x140da58e5",
+  "func": "0x140da5740",
+  "off": 421,
+  "section": ".data",
+  "name": "PATCHFN_13",
+  "chunk": "0x140da5740",
+  "new_fn": "0x140da55f0",
+  "new_site": "0x140da5795",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 2,
+  "old_ins": [
+   "0f8441050000 je 0x140da5e2c",
+   "894587 mov dword ptr [rbp - 0x79], eax",
+   "85c0 test eax, eax",
+   "0f84240a0000 je 0x140da631a"
+  ],
+  "new_ins": [
+   "0f8441050000 je 0x140da5cdc",
+   "894587 mov dword ptr [rbp - 0x79], eax",
+   "85c0 test eax, eax",
+   "0f84240a0000 je 0x140da61ca"
+  ]
+ },
+ {
+  "site": "0x146457b68",
+  "func": "0x146457b32",
+  "off": 54,
+  "section": ".text",
+  "name": "PATCHFN_14",
+  "chunk": "0x146457b32",
+  "new_fn": "0x140a1a710",
+  "new_site": "0x140a1a759",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 2,
+  "old_ins": [
+   "7513 jne 0x146457b7d",
+   "4885c9 test rcx, rcx",
+   "740e je 0x146457b7d",
+   "488b01 mov rax, qword ptr [rcx]"
+  ],
+  "new_ins": [
+   "7513 jne 0x140a1a76e",
+   "4885c9 test rcx, rcx",
+   "740e je 0x140a1a76e",
+   "488b01 mov rax, qword ptr [rcx]"
+  ]
+ },
+ {
+  "site": "0x14163fcda",
+  "func": "0x14163fae0",
+  "off": 506,
+  "section": ".data",
+  "name": "PATCHFN_15",
+  "chunk": "0x14163fae0",
+  "new_fn": "0x14163e810",
+  "new_site": "0x14163ea0a",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 7,
+  "old_ins": [
+   "0f84a2010000 je 0x14163fe82",
+   "488b9e18010000 mov rbx, qword ptr [rsi + 0x118]",
+   "41b0f9 mov r8b, 0xf9",
+   "488d542430 lea rdx, [rsp + 0x30]"
+  ],
+  "new_ins": [
+   "0f84a2010000 je 0x14163ebb2",
+   "488b9e18010000 mov rbx, qword ptr [rsi + 0x118]",
+   "41b0f9 mov r8b, 0xf9",
+   "488d542430 lea rdx, [rsp + 0x30]"
+  ]
+ },
+ {
+  "site": "0x1409cc6c0",
+  "func": "0x1409cc41d",
+  "off": 675,
+  "section": ".data",
+  "name": "PATCHFN_16",
+  "chunk": "0x1409cc41d",
+  "new_fn": "0x1409cd0cd",
+  "new_site": "0x1409cd370",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "0f859c070000 jne 0x1409cce62",
+   "f6868402000004 test byte ptr [rsi + 0x284], 4",
+   "0f858f070000 jne 0x1409cce62",
+   "32c0 xor al, al"
+  ],
+  "new_ins": [
+   "0f859c070000 jne 0x1409cdb12",
+   "f6868402000004 test byte ptr [rsi + 0x284], 4",
+   "0f858f070000 jne 0x1409cdb12",
+   "32c0 xor al, al"
+  ]
+ },
+ {
+  "site": "0x149cfba54",
+  "func": "0x149cfba45",
+  "off": 15,
+  "section": ".text",
+  "name": "PATCHFN_17",
+  "chunk": "0x149cfba45",
+  "new_fn": "0x1412cc75f",
+  "new_site": "0x1412cc76e",
+  "score": 11,
+  "max_score": 11,
+  "second_score": 3,
+  "old_ins": [
+   "7410 je 0x149cfba66",
+   "488b89c8000000 mov rcx, qword ptr [rcx + 0xc8]",
+   "488b01 mov rax, qword ptr [rcx]",
+   "ff9018020000 call qword ptr [rax + 0x218]"
+  ],
+  "new_ins": [
+   "7410 je 0x1412cc780",
+   "488b89c8000000 mov rcx, qword ptr [rcx + 0xc8]",
+   "488b01 mov rax, qword ptr [rcx]",
+   "ff9018020000 call qword ptr [rax + 0x218]"
+  ]
+ },
+ {
+  "site": "0x149f4f17b",
+  "func": "0x149f4f0d0",
+  "off": 171,
+  "section": ".text",
+  "name": "PATCHFN_18",
+  "chunk": "0x149f4f0d0",
+  "new_fn": "0x14136bc80",
+  "new_site": "0x14136bd2b",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "7407 je 0x149f4f184",
+   "e89ee141f7 call 0x14136d320",
+   "eb05 jmp 0x149f4f189",
+   "e807de41f7 call 0x14136cf90"
+  ],
+  "new_ins": [
+   "7407 je 0x14136bd34",
+   "e8be030000 call 0x14136c0f0",
+   "eb05 jmp 0x14136bd39",
+   "e827000000 call 0x14136bd60"
+  ]
+ },
+ {
+  "site": "0x1409c9a13",
+  "func": "0x1409c9960",
+  "off": 179,
+  "section": ".data",
+  "name": "PATCHFN_19",
+  "chunk": "0x1409c9960",
+  "new_fn": "0x1409ca600",
+  "new_site": "0x1409ca6b3",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 2,
+  "old_ins": [
+   "84c0 test al, al",
+   "4c0f45c1 cmovne r8, rcx",
+   "498bc0 mov rax, r8",
+   "48b9ffffffffffff0000 movabs rcx, 0xffffffffffff"
+  ],
+  "new_ins": [
+   "84c0 test al, al",
+   "4c0f45c1 cmovne r8, rcx",
+   "498bc0 mov rax, r8",
+   "48b9ffffffffffff0000 movabs rcx, 0xffffffffffff"
+  ]
+ },
+ {
+  "site": "0x149c1758d",
+  "func": "0x149c17515",
+  "off": 120,
+  "section": ".text",
+  "name": "PATCHFN_20",
+  "chunk": "0x149c17515",
+  "new_fn": "0x141263110",
+  "new_site": "0x1412631c7",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 1,
+  "old_ins": [
+   "72f7 jb 0x149c17586",
+   "4889d8 mov rax, rbx",
+   "48b9ffffffffffff0000 movabs rcx, 0xffffffffffff",
+   "4530ff xor r15b, r15b"
+  ],
+  "new_ins": [
+   "72f7 jb 0x1412631c0",
+   "488bc3 mov rax, rbx",
+   "48b9ffffffffffff0000 movabs rcx, 0xffffffffffff",
+   "4532ff xor r15b, r15b"
+  ]
+ },
+ {
+  "site": "0x14a62cf4e",
+  "func": "0x14a62cec0",
+  "off": 142,
+  "section": ".text",
+  "name": "PATCHFN_21",
+  "chunk": "0x14a62cec0",
+  "new_fn": "0x141714ea0",
+  "new_site": "0x141714f2e",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 5,
+  "old_ins": [
+   "747b je 0x14a62cfcb",
+   "488b4540 mov rax, qword ptr [rbp + 0x40]",
+   "89f9 mov ecx, edi",
+   "2b4d58 sub ecx, dword ptr [rbp + 0x58]"
+  ],
+  "new_ins": [
+   "747b je 0x141714fab",
+   "488b4540 mov rax, qword ptr [rbp + 0x40]",
+   "8bcf mov ecx, edi",
+   "2b4d58 sub ecx, dword ptr [rbp + 0x58]"
+  ]
+ },
+ {
+  "site": "0x1417cce2a",
+  "func": "0x1417ccd86",
+  "off": 164,
+  "section": ".data",
+  "name": "PATCHFN_22",
+  "chunk": "0x1417ccd86",
+  "new_fn": "0x1417cc1a6",
+  "new_site": "0x1417cc24a",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 3,
+  "old_ins": [
+   "0f85e0000000 jne 0x1417ccf10",
+   "498b07 mov rax, qword ptr [r15]",
+   "8bd7 mov edx, edi",
+   "498bcf mov rcx, r15"
+  ],
+  "new_ins": [
+   "0f85e0000000 jne 0x1417cc330",
+   "498b07 mov rax, qword ptr [r15]",
+   "8bd7 mov edx, edi",
+   "498bcf mov rcx, r15"
+  ]
+ },
+ {
+  "site": "0x1417ccd72",
+  "func": "0x1417ccce0",
+  "off": 146,
+  "section": ".data",
+  "name": "PATCHFN_23",
+  "chunk": "0x1417ccce0",
+  "new_fn": "0x1417cc100",
+  "new_site": "0x1417cc192",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 2,
+  "old_ins": [
+   "0f85ab010000 jne 0x1417ccf23",
+   "418806 mov byte ptr [r14], al",
+   "e96c010000 jmp 0x1417cceec",
+   "488b4928 mov rcx, qword ptr [rcx + 0x28]"
+  ],
+  "new_ins": [
+   "0f85ab010000 jne 0x1417cc343",
+   "418806 mov byte ptr [r14], al",
+   "e96c010000 jmp 0x1417cc30c",
+   "488b4928 mov rcx, qword ptr [rcx + 0x28]"
+  ]
+ },
+ {
+  "site": "0x1417d54f7",
+  "func": "0x1417d5463",
+  "off": 148,
+  "section": ".data",
+  "name": "PATCHFN_24",
+  "chunk": "0x1417d5463",
+  "new_fn": "0x1417d4983",
+  "new_site": "0x1417d4a17",
+  "score": 13,
+  "max_score": 13,
+  "second_score": 2,
+  "old_ins": [
+   "0f84f9020000 je 0x1417d57f6",
+   "4585ff test r15d, r15d",
+   "0f84f0020000 je 0x1417d57f6",
+   "4c8b7c2458 mov r15, qword ptr [rsp + 0x58]"
+  ],
+  "new_ins": [
+   "0f84f9020000 je 0x1417d4d16",
+   "4585ff test r15d, r15d",
+   "0f84f0020000 je 0x1417d4d16",
+   "4c8b7c2458 mov r15, qword ptr [rsp + 0x58]"
+  ]
+ },
+ {
+  "site": "0x142218770",
+  "func": null,
+  "off": null,
+  "section": ".trace",
+  "name": "PATCHFN_25",
+  "chunk": null,
+  "new_site": null,
+  "why": "no chunk"
+ }
+]
