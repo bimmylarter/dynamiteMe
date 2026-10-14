@@ -33,6 +33,8 @@ namespace Dynamite {
     int l_GetMissionsCompleted(lua_State *L);
     int l_GetActiveEquipmentID(lua_State *L);
     int l_GetEquipIDInSlot(lua_State *L);
+    int l_SendBodyPosition(lua_State *L);
+    int l_PopBodyUpdate(lua_State *L);
 }
 
 #endif // HOOK_DYNAMITELUA_H

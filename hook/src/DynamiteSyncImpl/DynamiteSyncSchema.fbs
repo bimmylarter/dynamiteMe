@@ -13,7 +13,8 @@ union Message {
    SendBossQuietExtraActionCommand,
    SendBossQuietSetNextActionTask,
    SendBossQuietSetActionTask,
-   SendBossQuietDamage
+   SendBossQuietDamage,
+   BodyPosition
 }
 
 table MessageWrapper {
@@ -155,4 +156,18 @@ table SendBossQuietDamage {
     life_damage: ushort;
     current_stamina: ushort;
     stamina_damage: ushort;
+}
+
+// Position of an NPC body (soldier/hostage) moved by the sending player.
+// Appended at the end of the Message union to keep older message ids stable.
+enum BodyState:ubyte {
+    carried,  // sender is carrying the body, pos follows the carrier
+    dropped,  // body was put down / thrown, pos is the final resting spot
+}
+
+table BodyPosition {
+    object_id: uint32;
+    pos: Vec3;
+    rot_y: float32;
+    state: BodyState;
 }

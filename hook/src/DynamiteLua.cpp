@@ -394,6 +394,42 @@ namespace Dynamite {
         return 1;
     }
 
+    // Dynamite.SendBodyPosition(gameObjectId, x, y, z, rotY, dropped)
+    // called from TppPlayer.lua while local player carries / after dropping an NPC
+    int l_SendBodyPosition(lua_State *L) {
+        const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        const auto pos = Vector3{
+            .x = static_cast<float>(luaL_checknumber(L, 2)),
+            .y = static_cast<float>(luaL_checknumber(L, 3)),
+            .z = static_cast<float>(luaL_checknumber(L, 4)),
+        };
+        const auto rotY = static_cast<float>(luaL_checknumber(L, 5));
+        const auto dropped = lua_toboolean(L, 6) != 0;
+
+        g_hook->dynamiteSyncImpl.SendBodyPosition(objectID, &pos, rotY, dropped);
+
+        return 0;
+    }
+
+    // local id, x, y, z, rotY, dropped = Dynamite.PopBodyUpdate()
+    // returns nothing (id == nil) when queue is empty
+    // called from TppPlayer.Update on game thread
+    int l_PopBodyUpdate(lua_State *L) {
+        const auto u = g_hook->dynamiteSyncImpl.PopBodyUpdate();
+        if (!u.has_value()) {
+            return 0;
+        }
+
+        lua_pushinteger(L, u->objectID);
+        lua_pushnumber(L, u->x);
+        lua_pushnumber(L, u->y);
+        lua_pushnumber(L, u->z);
+        lua_pushnumber(L, u->rotY);
+        lua_pushboolean(L, u->dropped);
+
+        return 6;
+    }
+
     // int l_GetCamoRate(lua_State *L) {
     //     // wrong!
     //     // auto lvar8 = *(uint32_t *)((char *)camouflageControllerImpl + 0x38);
@@ -433,6 +469,8 @@ namespace Dynamite {
             {"GetMissionsCompleted", l_GetMissionsCompleted},
             {"GetEquipment", l_GetActiveEquipmentID},
             {"GetEquipIDInSlot", l_GetEquipIDInSlot},
+            {"SendBodyPosition", l_SendBodyPosition},
+            {"PopBodyUpdate", l_PopBodyUpdate},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);

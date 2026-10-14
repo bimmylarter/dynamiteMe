@@ -9,12 +9,26 @@
 #include "Tpp/BossQuietDamage.h"
 #include "Tpp/TppTypes.h"
 
+#include <deque>
 #include <map>
+#include <mutex>
+#include <optional>
 #include <thread>
+#include <vector>
 
 const char DYNAMITE_RAW_HEADER[8] = {68, 89, 78, 65, 77, 73, 84, 69}; // DYNAMITE
 
 namespace Dynamite {
+    // Body position received from partner, applied later on the Lua (game) thread.
+    struct BodyUpdate {
+        uint32_t objectID;
+        float x;
+        float y;
+        float z;
+        float rotY;
+        bool dropped;
+    };
+
     class DynamiteSyncImpl {
       public:
         DynamiteSyncImpl();
@@ -85,6 +99,13 @@ namespace Dynamite {
         void SendBossQuietDamage(BossQuietDamage *damage);
         void HandleSendBossQuietDamage(const DynamiteMessage::MessageWrapper *w);
 
+        // Body (carried / dropped NPC) sync.
+        // Packets arrive on the network thread, so updates are queued and drained from Lua.
+        void SendBodyPosition(uint32_t objectID, const Vector3 *pos, float rotY, bool dropped);
+        void HandleBodyPosition(const DynamiteMessage::MessageWrapper *w);
+        std::optional<BodyUpdate> PopBodyUpdate();
+        void ClearBodyUpdates();
+
         void *steamUDPAddress = nullptr;
         void *steamUDPSocketInfo = nullptr;
         void *steamUDPSocket = nullptr;
@@ -94,6 +115,10 @@ namespace Dynamite {
         uint32_t packetSeen = 0;
         std::jthread syncThread;
         std::map<std::string, bool> syncStatus{};
+
+        std::mutex bodyMutex;
+        std::deque<BodyUpdate> bodyUpdates{};
+        static constexpr size_t maxBodyUpdates = 256;
         std::vector<std::string> enemyVars = {
             // "cpNames",
             // "cpFlags",
