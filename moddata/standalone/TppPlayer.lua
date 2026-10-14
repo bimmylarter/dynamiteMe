@@ -2554,8 +2554,11 @@ local function dynIsBodyType(gameObjectId)
 		or typeIndex == TppGameObject.GAME_OBJECT_TYPE_HOSTAGE_UNIQUE2
 end
 
-local function dynIsLocalPlayerCarrying()
-	return PlayerInfo.AndCheckStatus({ PlayerStatus.CARRY })
+-- PlayerInfo/PlayerStatus describe player 0 (host) on both machines, so carry state is read from the body itself:
+-- GetStatus returns NPC_STATE_CARRIED only in the game of the player who carries it
+local function dynIsCarried(gameObjectId)
+	local ok, status = pcall(GameObject.SendCommand, gameObjectId, { id = "GetStatus" })
+	return ok and status == TppGameObject.NPC_STATE_CARRIED
 end
 
 local function dynReset()
@@ -2565,18 +2568,25 @@ local function dynReset()
 	dynBody.remoteMoved = {}
 end
 
--- returns x, y, z, rotY (degrees) of the body, falling back to local player position
+-- returns x, y, z, rotY (degrees) of the body, nil if position is unavailable
 local function dynGetBodyPosition(gameObjectId)
-	local ok, pos = pcall(GameObject.SendCommand, gameObjectId, { id = "GetPosition" })
+	local ok, pos, rotY = pcall(GameObject.SendCommand, gameObjectId, { id = "GetPosition" })
 	if ok and pos ~= nil and pos.GetX ~= nil then
-		return pos:GetX(), pos:GetY(), pos:GetZ(), vars.playerRotY
+		return pos:GetX(), pos:GetY(), pos:GetZ(), rotY or 0
 	end
-	return vars.playerPosX, vars.playerPosY, vars.playerPosZ, vars.playerRotY
+	return nil
 end
 
 local function dynSend(gameObjectId, dropped)
 	local x, y, z, rotY = dynGetBodyPosition(gameObjectId)
-	Dynamite.SendBodyPosition(gameObjectId, x, y, z, rotY or 0, dropped)
+	if x == nil then
+		Dynamite.Log("body sync: no position for " .. tostring(gameObjectId))
+		return
+	end
+	Dynamite.SendBodyPosition(gameObjectId, x, y, z, rotY, dropped)
+	if dropped then
+		Dynamite.Log(string.format("body sync: sent drop %d at %.2f %.2f %.2f", gameObjectId, x, y, z))
+	end
 end
 
 local function dynApplyRemote(gameObjectId, x, y, z, rotY, dropped)
@@ -2610,6 +2620,7 @@ function e.DynamiteOnCarried(gameObjectId, carriedState)
 	if not dynBody.enabled then
 		return
 	end
+	Dynamite.Log("body sync: Carried " .. tostring(gameObjectId) .. " state " .. tostring(carriedState))
 	if carriedState ~= TppGameObject.NPC_CARRIED_STATE_START then
 		return
 	end
@@ -2639,7 +2650,8 @@ local function dynUpdate()
 
 	-- confirm local carry
 	if dynBody.pendingId ~= nil then
-		if dynIsLocalPlayerCarrying() then
+		if dynIsCarried(dynBody.pendingId) then
+			Dynamite.Log("body sync: carrying " .. tostring(dynBody.pendingId))
 			if dynBody.carriedId ~= nil and dynBody.carriedId ~= dynBody.pendingId then
 				dynSend(dynBody.carriedId, true)
 			end
@@ -2657,7 +2669,7 @@ local function dynUpdate()
 	-- stream carried body, detect drop
 	if dynBody.carriedId ~= nil then
 		local id = dynBody.carriedId
-		if dynIsLocalPlayerCarrying() then
+		if dynIsCarried(id) then
 			if now >= dynBody.nextSendTime then
 				dynSend(id, false)
 				dynBody.nextSendTime = now + dynBody.SEND_INTERVAL
