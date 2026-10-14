@@ -51,50 +51,88 @@ func vendorExists() bool {
 	return true
 }
 
-func vendorValid(path string) bool {
+// md5 sums of unmodified 00.dat files shipped by Steam
+var stock00 = map[string]string{
+	"2779dcc79b7b700ed70b3900344cc164": "1.0.15.3",
+	"e02aae5c3ce0df1437f8c783b31f4175": "1.0.15.3 (build 6239679)",
+	// June 2026 update: only foxpatch.dat guid and one ui texture pack differ, mod scripts are unaffected
+	"b28bedbc7b0a66f43caff81d2ecd96df": "1.0.15.4",
+}
+
+// stockVersion returns md5 sum and game version of unmodified 00.dat at path,
+// version is empty if file is modified or missing
+func stockVersion(path string) (string, string) {
 	h, err := util.Md5sum(path)
 	if err != nil {
-		return false
+		slog.Info("checksum", "path", path, "error", err.Error())
+		return "", ""
 	}
-	slog.Info("checksum", "path", path, "sum", fmt.Sprintf("%x", h))
-	// 2779dcc79b7b700ed70b3900344cc164
-	target := []byte{0x27, 0x79, 0xdc, 0xc7, 0x9b, 0x7b, 0x70, 0x0e, 0xd7, 0x0b, 0x39, 0x00, 0x34, 0x4c, 0xc1, 0x64}
-	if bytes.Compare(h, target) != 0 {
-		return false
+	sum := fmt.Sprintf("%x", h)
+	v := stock00[sum]
+	slog.Info("checksum", "path", path, "sum", sum, "version", v)
+	return sum, v
+}
+
+func vendorValid(path string) bool {
+	_, v := stockVersion(path)
+	return v != ""
+}
+
+func copyFile(src, dst string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	tmp := dst + ".tmp"
+	vv, err := os.Create(tmp)
+	if err != nil {
+		return err
 	}
 
-	return true
+	if _, err = vv.ReadFrom(f); err != nil {
+		vv.Close()
+		os.Remove(tmp)
+		return err
+	}
+
+	if err = vv.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+
+	return os.Rename(tmp, dst)
 }
 
 func backupVendor() error {
+	if _, err := os.Stat(filepath.Dir(plain00)); err != nil {
+		wd, _ := os.Getwd()
+		return fmt.Errorf("%s not found in %s. Put dynamite executable into the game directory (the one with mgsvtpp.exe) and run it from there", filepath.Dir(plain00), wd)
+	}
+
+	// 00.dat is unmodified (fresh install, game update or Steam file verification): it becomes the new vendor copy,
+	// otherwise an old vendor copy from previous game version would be repacked over updated data
+	if sum, v := stockVersion(plain00); v != "" {
+		if vendorExists() {
+			if vendorSum, _ := stockVersion(vendor00); vendorSum == sum {
+				return nil
+			}
+		}
+
+		slog.Info("saving unmodified 00.dat as vendor copy", "version", v)
+		return copyFile(plain00, vendor00)
+	}
+
 	if !vendorExists() {
-		slog.Info("00.dat.vendor does not exist, creating")
-		if !vendorValid(plain00) {
-			return fmt.Errorf("00.dat is not valid. Verify integrity of data files using Steam and try again")
-		}
+		return fmt.Errorf("00.dat is not valid. Verify integrity of data files using Steam and try again")
+	}
 
-		f, err := os.Open(plain00)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		vv, err := os.Create(vendor00)
-		if err != nil {
-			return err
-		}
-		defer vv.Close()
-
-		if _, err = vv.ReadFrom(f); err != nil {
-			return err
-		}
-	} else {
-		if !vendorValid(vendor00) {
-			slog.Warn("00.dat.vendor is invalid, you are on your own")
-			slog.Warn("Press Enter to continue...")
-			var a []byte
-			_, _ = fmt.Scanln(&a)
-		}
+	if !vendorValid(vendor00) {
+		slog.Warn("00.dat.vendor is invalid, you are on your own")
+		slog.Warn("Press Enter to continue...")
+		var a []byte
+		_, _ = fmt.Scanln(&a)
 	}
 
 	return nil
