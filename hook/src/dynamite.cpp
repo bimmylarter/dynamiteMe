@@ -13,6 +13,7 @@
 #include "Tpp/TppNPCLifeState.h"
 #include "memtag.h"
 #include "mgsvtpp_addresses_1_0_15_3_en.h"
+#include "mgsvtpp_addresses_1_0_15_4_en.h"
 #include "mgsvtpp_func_typedefs.h"
 #include "patch.h"
 #include "spdlog/sinks/basic_file_sink.h"
@@ -23,6 +24,40 @@
 #include "DynamiteLua.h"
 
 namespace Dynamite {
+    GameVersion DetectGameVersion(HMODULE exe) {
+        const auto base = reinterpret_cast<const uint8_t *>(exe);
+        const auto dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+        if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+            return GameVersion::Unknown;
+        }
+
+        const auto nt = reinterpret_cast<const IMAGE_NT_HEADERS64 *>(base + dos->e_lfanew);
+        if (nt->Signature != IMAGE_NT_SIGNATURE) {
+            return GameVersion::Unknown;
+        }
+
+        switch (nt->FileHeader.TimeDateStamp) {
+        case 1613108497:
+            return GameVersion::V1_0_15_3;
+        case 1783412888:
+            return GameVersion::V1_0_15_4;
+        default:
+            spdlog::error("unknown game exe, PE timestamp {}", nt->FileHeader.TimeDateStamp);
+            return GameVersion::Unknown;
+        }
+    }
+
+    const char *GameVersionName(const GameVersion v) {
+        switch (v) {
+        case GameVersion::V1_0_15_3:
+            return "1.0.15.3";
+        case GameVersion::V1_0_15_4:
+            return "1.0.15.4";
+        default:
+            return "unknown";
+        }
+    }
+
     void Dynamite::AbortHandler(int signal_number) {
         auto l = spdlog::get(logName);
         if (l != nullptr) {
@@ -97,9 +132,24 @@ namespace Dynamite {
             return;
         }
 
-        MH_Initialize();
+        gameVersion = DetectGameVersion(hExe);
+        log->info("game version {}", GameVersionName(gameVersion));
+        switch (gameVersion) {
+        case GameVersion::V1_0_15_3:
+            addressSet = mgsvtpp_adresses_1_0_15_3_en;
+            break;
+        case GameVersion::V1_0_15_4:
+            addressSet = mgsvtpp_adresses_1_0_15_4_en;
+            break;
+        default:
+            ShowMessageBox("Unsupported game version, dynamite is disabled.\n"
+                           "Supported versions: 1.0.15.3, 1.0.15.4 (Steam, regular version).",
+                "Dynamite error",
+                MB_ICONERROR);
+            return;
+        }
 
-        addressSet = mgsvtpp_adresses_1_0_15_3_en;
+        MH_Initialize();
         RealBaseAddr = (size_t)GetModuleHandle(nullptr);
 
         RebaseAddresses();

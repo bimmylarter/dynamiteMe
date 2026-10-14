@@ -2166,7 +2166,11 @@ function e.Messages()
 				end,
 			},
 		},
-		GameObject = { { msg = "RideHeli", func = e.QuietRideHeli } },
+		GameObject = {
+			{ msg = "RideHeli", func = e.QuietRideHeli },
+			-- dynamite: body sync
+			{ msg = "Carried", func = e.DynamiteOnCarried },
+		},
 		UI = {
 			{ msg = "EndFadeOut", sender = "OnSelectCboxDelivery", func = e.WarpByCboxDelivery },
 			{ msg = "EndFadeIn", sender = "OnEndWarpByCboxDelivery", func = e.OnEndFadeInWarpByCboxDelivery },
@@ -2510,6 +2514,185 @@ function e.OnMessage(l, a, i, o, t, n, r)
 end
 function e.Update()
 	e.UpdateDeliveryWarp()
+	e.DynamiteUpdateBodySync()
+end
+
+-- dynamite: body sync
+-- Carrying an NPC only moves it in the carrier's game. While the local player carries a body, its position is
+-- streamed to the partner; when it is put down, the final position is sent (twice, the second time after the
+-- ragdoll has settled). The receiving side warps the body to match. Incoming updates are queued by the hook
+-- on the network thread and applied here, on the game thread.
+local dynBody = {
+	SEND_INTERVAL = 0.2, -- seconds between "carried" updates
+	SETTLE_TIME = 1.5, -- seconds after drop before sending final resting position
+	CARRY_CONFIRM_TIME = 1.0, -- how long to wait for PlayerStatus.CARRY after Carried message
+	ECHO_GUARD_TIME = 1.0, -- ignore local carry of a body that partner moved this recently
+	FOLLOW_WHILE_CARRIED = true, -- move body along with partner while partner carries it
+	carriedId = nil,
+	pendingId = nil,
+	pendingTime = 0,
+	nextSendTime = 0,
+	settleId = nil,
+	settleTime = 0,
+	remoteMoved = {},
+	enabled = false,
+}
+e.dynBody = dynBody
+
+local function dynNow()
+	return Time.GetRawElapsedTimeSinceStartUp()
+end
+
+local function dynIsBodyType(gameObjectId)
+	if gameObjectId == nil or gameObjectId == GameObject.NULL_ID then
+		return false
+	end
+	local typeIndex = GameObject.GetTypeIndex(gameObjectId)
+	return typeIndex == TppGameObject.GAME_OBJECT_TYPE_SOLDIER2
+		or typeIndex == TppGameObject.GAME_OBJECT_TYPE_HOSTAGE2
+		or typeIndex == TppGameObject.GAME_OBJECT_TYPE_HOSTAGE_UNIQUE
+		or typeIndex == TppGameObject.GAME_OBJECT_TYPE_HOSTAGE_UNIQUE2
+end
+
+local function dynIsLocalPlayerCarrying()
+	return PlayerInfo.AndCheckStatus({ PlayerStatus.CARRY })
+end
+
+local function dynReset()
+	dynBody.carriedId = nil
+	dynBody.pendingId = nil
+	dynBody.settleId = nil
+	dynBody.remoteMoved = {}
+end
+
+-- returns x, y, z, rotY (degrees) of the body, falling back to local player position
+local function dynGetBodyPosition(gameObjectId)
+	local ok, pos = pcall(GameObject.SendCommand, gameObjectId, { id = "GetPosition" })
+	if ok and pos ~= nil and pos.GetX ~= nil then
+		return pos:GetX(), pos:GetY(), pos:GetZ(), vars.playerRotY
+	end
+	return vars.playerPosX, vars.playerPosY, vars.playerPosZ, vars.playerRotY
+end
+
+local function dynSend(gameObjectId, dropped)
+	local x, y, z, rotY = dynGetBodyPosition(gameObjectId)
+	Dynamite.SendBodyPosition(gameObjectId, x, y, z, rotY or 0, dropped)
+end
+
+local function dynApplyRemote(gameObjectId, x, y, z, rotY, dropped)
+	if gameObjectId == dynBody.carriedId then
+		-- both players grabbed same body, local carry wins
+		return
+	end
+	if not dynIsBodyType(gameObjectId) then
+		return
+	end
+	if not dropped and not dynBody.FOLLOW_WHILE_CARRIED then
+		return
+	end
+	dynBody.remoteMoved[gameObjectId] = dynNow()
+	if dynBody.settleId == gameObjectId then
+		dynBody.settleId = nil
+	end
+	local ok, err = pcall(GameObject.SendCommand, gameObjectId, {
+		id = "Warp",
+		degRotationY = rotY,
+		position = Vector3(x, y, z),
+	})
+	if not ok then
+		Dynamite.Log("body sync: warp failed for " .. tostring(gameObjectId) .. ": " .. tostring(err))
+	elseif dropped then
+		Dynamite.Log(string.format("body sync: placed %d at %.2f %.2f %.2f", gameObjectId, x, y, z))
+	end
+end
+
+function e.DynamiteOnCarried(gameObjectId, carriedState)
+	if not dynBody.enabled then
+		return
+	end
+	if carriedState ~= TppGameObject.NPC_CARRIED_STATE_START then
+		return
+	end
+	if not dynIsBodyType(gameObjectId) then
+		return
+	end
+	-- Carried may also fire for an NPC moved by partner (or by our own warp), so carry is confirmed in update
+	local movedAt = dynBody.remoteMoved[gameObjectId]
+	if movedAt ~= nil and (dynNow() - movedAt) < dynBody.ECHO_GUARD_TIME then
+		return
+	end
+	dynBody.pendingId = gameObjectId
+	dynBody.pendingTime = dynNow()
+end
+
+local function dynUpdate()
+	local now = dynNow()
+
+	-- apply partner updates
+	while true do
+		local id, x, y, z, rotY, dropped = Dynamite.PopBodyUpdate()
+		if id == nil then
+			break
+		end
+		dynApplyRemote(id, x, y, z, rotY, dropped)
+	end
+
+	-- confirm local carry
+	if dynBody.pendingId ~= nil then
+		if dynIsLocalPlayerCarrying() then
+			if dynBody.carriedId ~= nil and dynBody.carriedId ~= dynBody.pendingId then
+				dynSend(dynBody.carriedId, true)
+			end
+			dynBody.carriedId = dynBody.pendingId
+			dynBody.pendingId = nil
+			dynBody.nextSendTime = 0
+			if dynBody.settleId == dynBody.carriedId then
+				dynBody.settleId = nil
+			end
+		elseif (now - dynBody.pendingTime) > dynBody.CARRY_CONFIRM_TIME then
+			dynBody.pendingId = nil
+		end
+	end
+
+	-- stream carried body, detect drop
+	if dynBody.carriedId ~= nil then
+		local id = dynBody.carriedId
+		if dynIsLocalPlayerCarrying() then
+			if now >= dynBody.nextSendTime then
+				dynSend(id, false)
+				dynBody.nextSendTime = now + dynBody.SEND_INTERVAL
+			end
+		else
+			dynSend(id, true)
+			dynBody.carriedId = nil
+			dynBody.settleId = id
+			dynBody.settleTime = now + dynBody.SETTLE_TIME
+		end
+	end
+
+	-- resend final position once ragdoll stopped moving
+	if dynBody.settleId ~= nil and now >= dynBody.settleTime then
+		dynSend(dynBody.settleId, true)
+		dynBody.settleId = nil
+	end
+end
+
+function e.DynamiteUpdateBodySync()
+	local isCoop = TppMain ~= nil and TppMain.IsCoop ~= nil and TppMain.IsCoop(vars.missionCode)
+	if not isCoop or Dynamite == nil or Dynamite.PopBodyUpdate == nil then
+		if dynBody.enabled then
+			dynReset()
+			dynBody.enabled = false
+		end
+		return
+	end
+	dynBody.enabled = true
+
+	local ok, err = pcall(dynUpdate)
+	if not ok then
+		Dynamite.Log("body sync: update error: " .. tostring(err))
+		dynReset()
+	end
 end
 local c = {
 	[TppDefine.WEATHER.SUNNY] = 0,

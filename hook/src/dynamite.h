@@ -25,6 +25,23 @@ namespace Dynamite {
     static const std::string logName = "dynamite";
     inline std::map<std::string, uint64_t> addressSet;
 
+    // Supported game executables, identified by PE header timestamp.
+    enum class GameVersion {
+        Unknown,
+        V1_0_15_3, // before June 2026 Steam update
+        V1_0_15_4, // June 2026 Steam update
+    };
+
+    inline GameVersion gameVersion = GameVersion::Unknown;
+
+    GameVersion DetectGameVersion(HMODULE exe);
+    const char *GameVersionName(GameVersion v);
+
+    // Pick address for running game version, used by patches.
+    inline uintptr_t ByVersion(const uintptr_t v1_0_15_3, const uintptr_t v1_0_15_4) {
+        return gameVersion == GameVersion::V1_0_15_4 ? v1_0_15_4 : v1_0_15_3;
+    }
+
     class Dynamite {
       public:
         Dynamite();

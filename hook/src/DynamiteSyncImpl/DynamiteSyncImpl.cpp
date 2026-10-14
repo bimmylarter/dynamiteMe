@@ -51,6 +51,7 @@ namespace Dynamite {
 
         packetNumber = 0;
         packetSeen = 0;
+        ClearBodyUpdates();
 
         steamUDPSocket = nullptr;
         steamUDPAddress = nullptr;
@@ -1149,6 +1150,75 @@ namespace Dynamite {
         spdlog::info("{}: {}", __PRETTY_FUNCTION__, res);
     }
 
+    void DynamiteSyncImpl::SendBodyPosition(const uint32_t objectID, const Vector3 *pos, const float rotY, const bool dropped) {
+        packetNumber++;
+        flatbuffers::FlatBufferBuilder builder(128);
+        const auto p = DynamiteMessage::Vec3(pos->x, pos->y, pos->z);
+        const auto state = dropped ? DynamiteMessage::BodyState_dropped : DynamiteMessage::BodyState_carried;
+        const auto sv = DynamiteMessage::CreateBodyPosition(builder, objectID, &p, rotY, state);
+        const auto message = DynamiteMessage::CreateMessageWrapper(builder, packetNumber, DynamiteMessage::Message_BodyPosition, sv.Union());
+        builder.Finish(message);
+        const auto res = SendRaw(&builder);
+        if (dropped) {
+            // carried updates are frequent, log only final positions
+            spdlog::info("{}, objectID={}, pos={} {} {}, rotY={}, res={}", __PRETTY_FUNCTION__, objectID, pos->x, pos->y, pos->z, rotY, res);
+        }
+    }
+
+    void DynamiteSyncImpl::HandleBodyPosition(const DynamiteMessage::MessageWrapper *w) {
+        const auto m = w->msg_as_BodyPosition();
+        if (m == nullptr || m->pos() == nullptr) {
+            spdlog::error("{}, malformed message", __PRETTY_FUNCTION__);
+            return;
+        }
+
+        const BodyUpdate u{
+            .objectID = m->object_id(),
+            .x = m->pos()->x(),
+            .y = m->pos()->y(),
+            .z = m->pos()->z(),
+            .rotY = m->rot_y(),
+            .dropped = m->state() == DynamiteMessage::BodyState_dropped,
+        };
+
+        if (u.dropped) {
+            spdlog::info("{}, objectID={}, pos={} {} {}, rotY={}", __PRETTY_FUNCTION__, u.objectID, u.x, u.y, u.z, u.rotY);
+        }
+
+        std::lock_guard lock(bodyMutex);
+        // keep only the latest carried update per body, drops are always kept
+        if (!u.dropped) {
+            for (auto &existing : bodyUpdates) {
+                if (existing.objectID == u.objectID && !existing.dropped) {
+                    existing = u;
+                    return;
+                }
+            }
+        }
+
+        if (bodyUpdates.size() >= maxBodyUpdates) {
+            bodyUpdates.pop_front();
+        }
+
+        bodyUpdates.push_back(u);
+    }
+
+    std::optional<BodyUpdate> DynamiteSyncImpl::PopBodyUpdate() {
+        std::lock_guard lock(bodyMutex);
+        if (bodyUpdates.empty()) {
+            return std::nullopt;
+        }
+
+        const auto res = bodyUpdates.front();
+        bodyUpdates.pop_front();
+        return res;
+    }
+
+    void DynamiteSyncImpl::ClearBodyUpdates() {
+        std::lock_guard lock(bodyMutex);
+        bodyUpdates.clear();
+    }
+
     bool DynamiteSyncImpl::SendRaw(const flatbuffers::FlatBufferBuilder *builder) const {
         if (steamUDPSocket == nullptr) {
             spdlog::info("{}, steamUDPSocket is null", __PRETTY_FUNCTION__);
@@ -1272,6 +1342,9 @@ namespace Dynamite {
             break;
         case DynamiteMessage::Message_SendBossQuietDamage:
             HandleSendBossQuietDamage(wrapper);
+            break;
+        case DynamiteMessage::Message_BodyPosition:
+            HandleBodyPosition(wrapper);
             break;
         default:
             spdlog::error("{}, unknown message type {}", __PRETTY_FUNCTION__, static_cast<uint32_t>(wrapper->msg_type()));

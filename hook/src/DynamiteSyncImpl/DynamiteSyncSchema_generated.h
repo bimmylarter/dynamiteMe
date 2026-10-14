@@ -85,6 +85,9 @@ struct SendBossQuietSetActionTaskBuilder;
 struct SendBossQuietDamage;
 struct SendBossQuietDamageBuilder;
 
+struct BodyPosition;
+struct BodyPositionBuilder;
+
 enum Message : uint8_t {
   Message_NONE = 0,
   Message_Ping = 1,
@@ -100,11 +103,12 @@ enum Message : uint8_t {
   Message_SendBossQuietSetNextActionTask = 11,
   Message_SendBossQuietSetActionTask = 12,
   Message_SendBossQuietDamage = 13,
+  Message_BodyPosition = 14,
   Message_MIN = Message_NONE,
-  Message_MAX = Message_SendBossQuietDamage
+  Message_MAX = Message_BodyPosition
 };
 
-inline const Message (&EnumValuesMessage())[14] {
+inline const Message (&EnumValuesMessage())[15] {
   static const Message values[] = {
     Message_NONE,
     Message_Ping,
@@ -119,13 +123,14 @@ inline const Message (&EnumValuesMessage())[14] {
     Message_SendBossQuietExtraActionCommand,
     Message_SendBossQuietSetNextActionTask,
     Message_SendBossQuietSetActionTask,
-    Message_SendBossQuietDamage
+    Message_SendBossQuietDamage,
+    Message_BodyPosition
   };
   return values;
 }
 
 inline const char * const *EnumNamesMessage() {
-  static const char * const names[15] = {
+  static const char * const names[16] = {
     "NONE",
     "Ping",
     "AddFixedUserMarker",
@@ -140,13 +145,14 @@ inline const char * const *EnumNamesMessage() {
     "SendBossQuietSetNextActionTask",
     "SendBossQuietSetActionTask",
     "SendBossQuietDamage",
+    "BodyPosition",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameMessage(Message e) {
-  if (::flatbuffers::IsOutRange(e, Message_NONE, Message_SendBossQuietDamage)) return "";
+  if (::flatbuffers::IsOutRange(e, Message_NONE, Message_BodyPosition)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesMessage()[index];
 }
@@ -205,6 +211,10 @@ template<> struct MessageTraits<DynamiteMessage::SendBossQuietSetActionTask> {
 
 template<> struct MessageTraits<DynamiteMessage::SendBossQuietDamage> {
   static const Message enum_value = Message_SendBossQuietDamage;
+};
+
+template<> struct MessageTraits<DynamiteMessage::BodyPosition> {
+  static const Message enum_value = Message_BodyPosition;
 };
 
 bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Message type);
@@ -331,6 +341,36 @@ inline const char *EnumNameBossQuietNextActionTaskActionCondition(BossQuietNextA
   if (::flatbuffers::IsOutRange(e, BossQuietNextActionTaskActionCondition_out_of_nav, BossQuietNextActionTaskActionCondition_in_nav_without_state)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesBossQuietNextActionTaskActionCondition()[index];
+}
+
+enum BodyState : uint8_t {
+  BodyState_carried = 0,
+  BodyState_dropped = 1,
+  BodyState_MIN = BodyState_carried,
+  BodyState_MAX = BodyState_dropped
+};
+
+inline const BodyState (&EnumValuesBodyState())[2] {
+  static const BodyState values[] = {
+    BodyState_carried,
+    BodyState_dropped
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesBodyState() {
+  static const char * const names[3] = {
+    "carried",
+    "dropped",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameBodyState(BodyState e) {
+  if (::flatbuffers::IsOutRange(e, BodyState_carried, BodyState_dropped)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesBodyState()[index];
 }
 
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) Vec3 FLATBUFFERS_FINAL_CLASS {
@@ -471,6 +511,9 @@ struct MessageWrapper FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const DynamiteMessage::SendBossQuietDamage *msg_as_SendBossQuietDamage() const {
     return msg_type() == DynamiteMessage::Message_SendBossQuietDamage ? static_cast<const DynamiteMessage::SendBossQuietDamage *>(msg()) : nullptr;
   }
+  const DynamiteMessage::BodyPosition *msg_as_BodyPosition() const {
+    return msg_type() == DynamiteMessage::Message_BodyPosition ? static_cast<const DynamiteMessage::BodyPosition *>(msg()) : nullptr;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_PACKET_NUM, 4) &&
@@ -531,6 +574,10 @@ template<> inline const DynamiteMessage::SendBossQuietSetActionTask *MessageWrap
 
 template<> inline const DynamiteMessage::SendBossQuietDamage *MessageWrapper::msg_as<DynamiteMessage::SendBossQuietDamage>() const {
   return msg_as_SendBossQuietDamage();
+}
+
+template<> inline const DynamiteMessage::BodyPosition *MessageWrapper::msg_as<DynamiteMessage::BodyPosition>() const {
+  return msg_as_BodyPosition();
 }
 
 struct MessageWrapperBuilder {
@@ -1824,6 +1871,77 @@ inline ::flatbuffers::Offset<SendBossQuietDamage> CreateSendBossQuietDamage(
   return builder_.Finish();
 }
 
+struct BodyPosition FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef BodyPositionBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OBJECT_ID = 4,
+    VT_POS = 6,
+    VT_ROT_Y = 8,
+    VT_STATE = 10
+  };
+  uint32_t object_id() const {
+    return GetField<uint32_t>(VT_OBJECT_ID, 0);
+  }
+  const DynamiteMessage::Vec3 *pos() const {
+    return GetStruct<const DynamiteMessage::Vec3 *>(VT_POS);
+  }
+  float rot_y() const {
+    return GetField<float>(VT_ROT_Y, 0.0f);
+  }
+  DynamiteMessage::BodyState state() const {
+    return static_cast<DynamiteMessage::BodyState>(GetField<uint8_t>(VT_STATE, 0));
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_OBJECT_ID, 4) &&
+           VerifyField<DynamiteMessage::Vec3>(verifier, VT_POS, 4) &&
+           VerifyField<float>(verifier, VT_ROT_Y, 4) &&
+           VerifyField<uint8_t>(verifier, VT_STATE, 1) &&
+           verifier.EndTable();
+  }
+};
+
+struct BodyPositionBuilder {
+  typedef BodyPosition Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_object_id(uint32_t object_id) {
+    fbb_.AddElement<uint32_t>(BodyPosition::VT_OBJECT_ID, object_id, 0);
+  }
+  void add_pos(const DynamiteMessage::Vec3 *pos) {
+    fbb_.AddStruct(BodyPosition::VT_POS, pos);
+  }
+  void add_rot_y(float rot_y) {
+    fbb_.AddElement<float>(BodyPosition::VT_ROT_Y, rot_y, 0.0f);
+  }
+  void add_state(DynamiteMessage::BodyState state) {
+    fbb_.AddElement<uint8_t>(BodyPosition::VT_STATE, static_cast<uint8_t>(state), 0);
+  }
+  explicit BodyPositionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<BodyPosition> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<BodyPosition>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<BodyPosition> CreateBodyPosition(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t object_id = 0,
+    const DynamiteMessage::Vec3 *pos = nullptr,
+    float rot_y = 0.0f,
+    DynamiteMessage::BodyState state = DynamiteMessage::BodyState_carried) {
+  BodyPositionBuilder builder_(_fbb);
+  builder_.add_rot_y(rot_y);
+  builder_.add_pos(pos);
+  builder_.add_object_id(object_id);
+  builder_.add_state(state);
+  return builder_.Finish();
+}
+
 inline bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Message type) {
   switch (type) {
     case Message_NONE: {
@@ -1879,6 +1997,10 @@ inline bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Me
     }
     case Message_SendBossQuietDamage: {
       auto ptr = reinterpret_cast<const DynamiteMessage::SendBossQuietDamage *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Message_BodyPosition: {
+      auto ptr = reinterpret_cast<const DynamiteMessage::BodyPosition *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;

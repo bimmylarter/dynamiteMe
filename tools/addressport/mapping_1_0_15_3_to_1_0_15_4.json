@@ -1,0 +1,1012 @@
+{
+ "IsDefenseTeamByOnlineFobLocal": {
+  "old": "0x14d9ba3b0",
+  "new": "0x141e03080",
+  "how": "resolver:high"
+ },
+ "IsOffenseTeamByOnlineFobLocal": {
+  "old": "0x141e02e40",
+  "new": "0x141e030b0",
+  "how": "resolver:high"
+ },
+ "CreateHostSession": {
+  "old": "0x1459f3e20",
+  "new": "0x1407ee590",
+  "how": "resolver:high"
+ },
+ "NetworkSystemCreateHostSession": {
+  "old": "0x14da33790",
+  "new": "0x141e0afb0",
+  "how": "resolver:high"
+ },
+ "CreateClientSession": {
+  "old": "0x1459f3910",
+  "new": "0x1407ee380",
+  "how": "resolver:high"
+ },
+ "SetSteamId": {
+  "old": "0x14c404640",
+  "new": "0x141a5fbe0",
+  "how": "resolver:high"
+ },
+ "FobTargetCtor": {
+  "old": "0x1459ed160",
+  "new": "0x1407ed6f0",
+  "how": "resolver:high"
+ },
+ "SessionConnectInfoCtor": {
+  "old": "0x1459edf00",
+  "new": "0x1407ed800",
+  "how": "resolver:high"
+ },
+ "NetInfoCreateSession": {
+  "old": "0x14da5c070",
+  "new": "0x141e0ced0",
+  "how": "resolver:high"
+ },
+ "IsConnectReady": {
+  "old": "0x1459d0cc0",
+  "new": "0x14681cb90",
+  "how": "resolver:high"
+ },
+ "UpdateClientEstablished": {
+  "old": "0x140316610",
+  "new": "0x140315be0",
+  "how": "resolver:high"
+ },
+ "SessionImpl2IsHost": {
+  "old": "0x143e64400",
+  "new": "0x140313fe0",
+  "how": "resolver:high"
+ },
+ "GetFobOffensePlayerInstanceIndex": {
+  "old": "0x14d9b00e0",
+  "new": "0x141e02770",
+  "how": "resolver:high"
+ },
+ "GetFobDefensePlayerInstanceIndex": {
+  "old": "0x14d9afbc0",
+  "new": "0x141e026b0",
+  "how": "resolver:high"
+ },
+ "CommandPost2ImplGetAvailableMemberCount": {
+  "old": "0x1472a0500",
+  "new": "0x140d5b220",
+  "how": "resolver:high"
+ },
+ "CommandPost2ImplGetMaxCpCount": {
+  "old": "0x140c93de0",
+  "new": null,
+  "how": "manual: old address was int3 padding; unused"
+ },
+ "GetUiMarkerTypeFromSystemType2": {
+  "old": "0x140934580",
+  "new": "0x140935020",
+  "how": "resolver:high"
+ },
+ "SightManagerImplSetMarker": {
+  "old": "0x149c687d0",
+  "new": "0x14127fb10",
+  "how": "resolver:high"
+ },
+ "SteamUdpSocketImplOnP2PSessionRequest": {
+  "old": "0x14c4040c0",
+  "new": "0x141a5fa10",
+  "how": "manual: neighbour alignment (twin fn)"
+ },
+ "MessageBufferAddMessage": {
+  "old": "0x1435ce000",
+  "new": "0x143a19ba0",
+  "how": "resolver:high"
+ },
+ "AddLocalDamage": {
+  "old": "0x141192af0",
+  "new": "0x1411922c0",
+  "how": "resolver:high"
+ },
+ "DamageControllerImplInitialize": {
+  "old": "0x14991a290",
+  "new": "0x141195340",
+  "how": "resolver:high"
+ },
+ "SynchronizerImplGetDamage": {
+  "old": "0x149cb4c70",
+  "new": "0x1412a4580",
+  "how": "resolver:high"
+ },
+ "Marker2SystemImpl": {
+  "old": "0x144fdb110",
+  "new": "0x1405c30c0",
+  "how": "resolver:high"
+ },
+ "Marker2SystemImplPlacedUserMarkerFixed": {
+  "old": "0x144fe5400",
+  "new": "0x1405c53a0",
+  "how": "resolver:high"
+ },
+ "GetLocalPlayerID": {
+  "old": "0x144c972c0",
+  "new": "0x14053c990",
+  "how": "resolver:high"
+ },
+ "RemoveUserMarker": {
+  "old": "0x1460706a0",
+  "new": "0x14094c660",
+  "how": "resolver:high"
+ },
+ "EquipHudSystemImplInitData": {
+  "old": "0x14606c570",
+  "new": "0x14094bc00",
+  "how": "resolver:high"
+ },
+ "Marker2SystemImplRemovedUserMarker": {
+  "old": "0x144fe6a80",
+  "new": "0x1405c6250",
+  "how": "resolver:high"
+ },
+ "Marker2SystemImplPlacedUserMarkerFollow": {
+  "old": "0x144fe5920",
+  "new": "0x1405c5530",
+  "how": "resolver:high"
+ },
+ "Marker2SystemImplRemovedAllUserMarker": {
+  "old": "0x1405c52f0",
+  "new": "0x1405c6190",
+  "how": "resolver:high"
+ },
+ "SightManagerImplInitialize": {
+  "old": "0x149c63e20",
+  "new": "0x14127ea60",
+  "how": "resolver:high"
+ },
+ "UiControllerImplSetNoUseEquipId": {
+  "old": "0x1496b3b50",
+  "new": "0x140fe8320",
+  "how": "resolver:high"
+ },
+ "EquipCrossEvCallIsItemNoUse": {
+  "old": "0x145d0b630",
+  "new": "0x1408ae340",
+  "how": "resolver:high"
+ },
+ "TppUiEmblemImplEmblemEditorSystemImplCreateEmblemParameters": {
+  "old": "0x14094c300",
+  "new": "0x14094cdd0",
+  "how": "resolver:high"
+ },
+ "TppUiEmblemImplEmblemEditorSystemImplCreateEmblem": {
+  "old": "0x146073350",
+  "new": "0x14094cb30",
+  "how": "resolver:high"
+ },
+ "TppUiEmblemImplEmblemEditorSystemImplLoadEmblemTextureInfo": {
+  "old": "0x14607be80",
+  "new": "0x14094da70",
+  "how": "resolver:high"
+ },
+ "FoxNtImplSessionImpl2DeleteMember": {
+  "old": "0x143e5c940",
+  "new": "0x1403132b0",
+  "how": "resolver:high"
+ },
+ "FoxImplMessage2MessageBox2ImplSendMessageToSubscribers": {
+  "old": "0x1435d1f00",
+  "new": "0x140180f20",
+  "how": "resolver:high"
+ },
+ "TppUiEmblemImplEmblemEditorSystemImplDeleteTexture": {
+  "old": "0x1460741f0",
+  "new": "0x14094d2d0",
+  "how": "resolver:high"
+ },
+ "TppUiEmblemImplEmblemEditorSystemImplUnloadEmblemTextureInfo": {
+  "old": "0x14607e250",
+  "new": "0x14094de60",
+  "how": "manual: block delta +0xad0, alignment"
+ },
+ "TppGkTppGameKitModuleEnd": {
+  "old": "0x144d18950",
+  "new": "0x140555b60",
+  "how": "resolver:high"
+ },
+ "TppUiEmblemImplEmblemEditorSystemImplDeleteBlender": {
+  "old": "0x146074060",
+  "new": "0x14094d2c0",
+  "how": "resolver:high"
+ },
+ "TppGkEmblemManagerCreateBlender": {
+  "old": "0x144d1e170",
+  "new": "0x140556ea0",
+  "how": "resolver:high"
+ },
+ "TppUiEmblemImplEmblemEditorSystemImplIsReady": {
+  "old": "0x14607bd70",
+  "new": "0x14094da60",
+  "how": "resolver:high"
+ },
+ "TppGmPlayerImplClimbActionPluginImplCheckActionState": {
+  "old": "0x149876920",
+  "new": "0x14114a900",
+  "how": "resolver:high"
+ },
+ "FoxGeoPathResultGetNumPoint": {
+  "old": "0x14ce84090",
+  "new": "0x141bc1a20",
+  "how": "resolver:high"
+ },
+ "HashMapFindKey": {
+  "old": "0x142ed7be0",
+  "new": "0x1400249f0",
+  "how": "resolver:high"
+ },
+ "GetQuarkSystemTable": {
+  "old": "0x140bff3f0",
+  "new": "0x140bff050",
+  "how": "manual: alignment + call target"
+ },
+ "FoxStrHash32": {
+  "old": "0x14c1bd730",
+  "new": "0x141a09ac0",
+  "how": "resolver:high"
+ },
+ "FoxFindEntity": {
+  "old": "0x14312acb0",
+  "new": "0x140067470",
+  "how": "resolver:high"
+ },
+ "FoxGetEntityHandle": {
+  "old": "0x14321e540",
+  "new": "0x1400c4ba0",
+  "how": "resolver:high"
+ },
+ "FoxGetEntityProperty": {
+  "old": "0x1400c4e80",
+  "new": "0x1400c4f30",
+  "how": "resolver:high"
+ },
+ "FoxCreatePropertyInfo": {
+  "old": "0x1400926a0",
+  "new": "0x1400926f0",
+  "how": "manual: 79/80 identical ins"
+ },
+ "ValueGetAsUInt32": {
+  "old": "0x140065480",
+  "new": "0x1400655e0",
+  "how": "manual: identical switch cases"
+ },
+ "FoxString": {
+  "old": "0x142eaf970",
+  "new": "0x14001d0e0",
+  "how": "resolver:high"
+ },
+ "FindGameObjectWithID": {
+  "old": "0x146c95580",
+  "new": "0x147b5c9d0",
+  "how": "resolver:high"
+ },
+ "Soldier2ImplGetInterface": {
+  "old": "0x149f2f3d0",
+  "new": "0x141351780",
+  "how": "resolver:high"
+ },
+ "PlayerInfoServiceGetPositionAtIndex": {
+  "old": "0x14d9b7770",
+  "new": "0x141e02dd0",
+  "how": "resolver:high"
+ },
+ "FoxNtSessionGetMainSession": {
+  "old": "0x143e60970",
+  "new": "0x140313780",
+  "how": "resolver:high"
+ },
+ "GetSessionMemberCount": {
+  "old": "0x143e60ef0",
+  "new": "0x140313860",
+  "how": "resolver:high"
+ },
+ "CloseSession": {
+  "old": "0x146457b20",
+  "new": "0x140a1a710",
+  "how": "resolver:high"
+ },
+ "Player2GameObjectImplWarp": {
+  "old": "0x14627c6f0",
+  "new": "0x1409ceae0",
+  "how": "resolver:high"
+ },
+ "ScriptDeclVarsImplSetVarValue": {
+  "old": "0x140ae2090",
+  "new": "0x140ae28e0",
+  "how": "resolver:high"
+ },
+ "SoldierRouteAiImplPreUpdate": {
+  "old": "0x141572270",
+  "new": "0x141570fa0",
+  "how": "resolver:high"
+ },
+ "RouteGroupImplGetEventId": {
+  "old": "0x144b8d070",
+  "new": "0x140514b50",
+  "how": "resolver:high"
+ },
+ "AiControllerImplAddNode": {
+  "old": "0x140c0f230",
+  "new": "0x140c0ed90",
+  "how": "resolver:high"
+ },
+ "AiControllerImplSleepNode": {
+  "old": "0x146d1bf60",
+  "new": "0x140c0f8e0",
+  "how": "resolver:high"
+ },
+ "AiControllerImplWakeNode": {
+  "old": "0x146d1c6c0",
+  "new": "0x140c100b0",
+  "how": "resolver:high"
+ },
+ "CoreAiImplGetVehicleId": {
+  "old": "0x149170560",
+  "new": "0x14142bdb0",
+  "how": "manual: identical instructions (folded)"
+ },
+ "CoreAiImplGetVehicleRideState": {
+  "old": "0x14a0a2ab0",
+  "new": "0x14142bde0",
+  "how": "resolver:high"
+ },
+ "CoreAiImplIsVehicleRetain": {
+  "old": "0x14a0a3f30",
+  "new": "0x14142c210",
+  "how": "resolver:high"
+ },
+ "SoldierImplRouteAiImplCheckVehicleAndWalkerGearGetInAndOutStep": {
+  "old": "0x14156d590",
+  "new": "0x14156c2a0",
+  "how": "resolver:high"
+ },
+ "StatusControllerImplIsSet": {
+  "old": "0x144cba8d0",
+  "new": "0x14053eb20",
+  "how": "resolver:high"
+ },
+ "ScriptDeclVarsImplGetVarHandleWithVarIndex": {
+  "old": "0x140ae17c0",
+  "new": "0x140ae2010",
+  "how": "resolver:high"
+ },
+ "GmGetScriptVarInfo": {
+  "old": "0x1461f02b0",
+  "new": "0x1409aa920",
+  "how": "resolver:high"
+ },
+ "BandWidthManagerImplCalcAverageRttOfBetterHalfConnection": {
+  "old": "0x1407e0580",
+  "new": "0x1407e10b0",
+  "how": "resolver:high"
+ },
+ "BandWidthManagerImplCalcAverageLostRateOfBetterHalfConnection": {
+  "old": "0x1407e0370",
+  "new": "0x1407e0ea0",
+  "how": "resolver:high"
+ },
+ "BandWidthManagerImplStartLimitState": {
+  "old": "0x1459bf210",
+  "new": "0x1407e13e0",
+  "how": "manual: alignment block 32"
+ },
+ "FoxNioMpMessageContainerGetFreeSize": {
+  "old": "0x14c408840",
+  "new": "0x141a60750",
+  "how": "resolver:high"
+ },
+ "FoxNioImplMpMuxImplSend": {
+  "old": "0x141a59f30",
+  "new": "0x141a59bf0",
+  "how": "resolver:high"
+ },
+ "FoxNioImplMpMuxImplRecv1": {
+  "old": "0x141a59690",
+  "new": "0x141a59350",
+  "how": "resolver:high"
+ },
+ "FoxNioImplMpMuxImplRecv2": {
+  "old": "0x141a59870",
+  "new": "0x141a59530",
+  "how": "resolver:high"
+ },
+ "FoxNtPeerControllerSend": {
+  "old": "0x143e73b60",
+  "new": "0x140318110",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplPeerIsSendPacketEmpty": {
+  "old": "0x143eab090",
+  "new": "0x140325070",
+  "how": "resolver:high"
+ },
+ "FoxNtTotalControllerSend": {
+  "old": "0x143e72910",
+  "new": "0x140317ce0",
+  "how": "resolver:high"
+ },
+ "FoxNtImplTransceiverManagerImplPeerSend": {
+  "old": "0x14031aec0",
+  "new": "0x14031a530",
+  "how": "resolver:high"
+ },
+ "FoxNioImplMpSocketImplSend": {
+  "old": "0x141a5b150",
+  "new": "0x141a5ae10",
+  "how": "resolver:high"
+ },
+ "FoxNioImplMpMuxImplGetTotalPayloadSize": {
+  "old": "0x1467a3500",
+  "new": "0x141a59160",
+  "how": "manual: unique identical body (folded)"
+ },
+ "FoxNioMpMessageSerializerSerialize": {
+  "old": "0x141a60a90",
+  "new": "0x141a60760",
+  "how": "resolver:high"
+ },
+ "FoxNioMpMessageContainerCreate": {
+  "old": "0x14c407c00",
+  "new": "0x141a606d0",
+  "how": "resolver:high"
+ },
+ "FoxNioMpMessageContainerAddMessage": {
+  "old": "0x14c406e40",
+  "new": "0x141a604a0",
+  "how": "resolver:high"
+ },
+ "FoxNioImplSppSocketImplGetState": {
+  "old": "0x14c2db550",
+  "new": "0x141a55a70",
+  "how": "resolver:high"
+ },
+ "FoxNtImplSyncMemoryCollectorSyncMemoryCollector": {
+  "old": "0x143ebb4b0",
+  "new": "0x1403279a0",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketBufferImplAlloc": {
+  "old": "0x143ea6510",
+  "new": "0x140324520",
+  "how": "resolver:high"
+ },
+ "TppGmImplScriptDeclVarsImplOnSessionNotify": {
+  "old": "0x140ae1bc0",
+  "new": "0x140ae2410",
+  "how": "resolver:high"
+ },
+ "FoxBitStreamWriterPrimitiveWrite": {
+  "old": "0x143ea3d10",
+  "new": "0x1403242e0",
+  "how": "resolver:high"
+ },
+ "TppGmImplScriptDeclVarsImplGetVarHandleWithVarIndex": {
+  "old": "0x140ae17c0",
+  "new": "0x140ae2010",
+  "how": "resolver:high"
+ },
+ "FoxNtImplTransceiverManagerImplPeerSendImpl1": {
+  "old": "0x143e7c130",
+  "new": "0x14031aa70",
+  "how": "resolver:high"
+ },
+ "FoxNtImplTransceiverManagerImplPeerSendImpl2": {
+  "old": "0x143e7c270",
+  "new": "0x14031ab70",
+  "how": "resolver:high"
+ },
+ "FoxNtImplTransceiverImplTransceiverImpl": {
+  "old": "0x140323ad0",
+  "new": "0x140323440",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplPeerRequestToSend": {
+  "old": "0x1403257f0",
+  "new": "0x140325160",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketBufferImplGameSocketBufferImpl": {
+  "old": "0x143ea61a0",
+  "new": "0x144afb7c0",
+  "how": "manual: alignment, via new stub 0x1403244c0"
+ },
+ "FoxNioMpMessageCreate": {
+  "old": "0x14c407850",
+  "new": "0x141a60670",
+  "how": "resolver:high"
+ },
+ "FoxNtImplNetworkSystemImplGetMainSession": {
+  "old": "0x143eae4b0",
+  "new": "0x1403256e0",
+  "how": "resolver:high"
+ },
+ "FoxImplScopeAllocatorImplAlloc": {
+  "old": "0x142f32e00",
+  "new": "0x1400345a0",
+  "how": "resolver:high"
+ },
+ "FoxScopeMemoryScopeMemory1": {
+  "old": "0x140034710",
+  "new": "0x140034470",
+  "how": "manual: alignment + call target"
+ },
+ "FoxScopeMemoryScopeMemoryDtor": {
+  "old": "0x1400347f0",
+  "new": "0x140034550",
+  "how": "manual: alignment + jmp target"
+ },
+ "TppGmImplScriptDeclVarsImplUpdate": {
+  "old": "0x140ae2180",
+  "new": "0x140ae29d0",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplGetPacketCount": {
+  "old": "0x143ea9a10",
+  "new": "0x140324d70",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplGetPacket": {
+  "old": "0x143ea9670",
+  "new": "0x140324ce0",
+  "how": "resolver:high"
+ },
+ "FoxNtImplNetworkSystemImplCreateGameSocket": {
+  "old": "0x143ead9d0",
+  "new": "0x1403255d0",
+  "how": "resolver:high"
+ },
+ "FoxNtNtModuleInit": {
+  "old": "0x14d365da0",
+  "new": "0x141ced880",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplRequestToSendToMember": {
+  "old": "0x143eab200",
+  "new": "0x140325250",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplSetInterval": {
+  "old": "0x143eabc30",
+  "new": "0x140325420",
+  "how": "resolver:high"
+ },
+ "FoxNtImplPeerCommonInitializeLastSendTime": {
+  "old": "0x143e9da20",
+  "new": "0x140323350",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplGetPacketSize": {
+  "old": "0x143ea9db0",
+  "new": "0x140324e40",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplGameSocketImplDtor": {
+  "old": "0x143ea8150",
+  "new": "0x1403249d0",
+  "how": "resolver:high"
+ },
+ "TppGmImplScriptDeclVarsImplGetVarHandle": {
+  "old": "0x140ae1630",
+  "new": "0x140ae1e80",
+  "how": "resolver:high"
+ },
+ "TppGmImplScriptDeclVarsImplScriptDeclVarsImpl": {
+  "old": "0x146845ab0",
+  "new": "0x140ae0950",
+  "how": "resolver:high"
+ },
+ "TppGmImplScriptSystemImplGetScriptDeclVarHandle": {
+  "old": "0x1461f4ce0",
+  "new": "0x1409abe20",
+  "how": "resolver:high"
+ },
+ "TppGmImplScriptDeclVarsImplGetVarIndexWithName": {
+  "old": "0x146849370",
+  "new": "0x140ae2130",
+  "how": "resolver:high"
+ },
+ "TppGmGetGVars": {
+  "old": "0x146848a40",
+  "new": "0x140ae1e60",
+  "how": "manual: alignment + global order"
+ },
+ "TppGmGetSVars": {
+  "old": "0x1468490b0",
+  "new": "0x140ae1e70",
+  "how": "manual: alignment + global order"
+ },
+ "FoxNtImplSessionImpl2GetMemberInterfaceAtIndex": {
+  "old": "0x143e61370",
+  "new": "0x140313930",
+  "how": "resolver:high"
+ },
+ "FoxNtImplGameSocketImplHandleMessage": {
+  "old": "0x143eaa120",
+  "new": "0x140324ec0",
+  "how": "resolver:high"
+ },
+ "FoxNtImplPeerCommonPeerCommon": {
+  "old": "0x143e9cf60",
+  "new": "0x140323220",
+  "how": "resolver:high"
+ },
+ "TppGmPlayerImplSynchronizerImplInitialize": {
+  "old": "0x1412a6c50",
+  "new": "0x1412a6340",
+  "how": "resolver:high"
+ },
+ "TppGmImplScriptDeclVarsImplScriptDeclVarsImplDtor": {
+  "old": "0x146845fc0",
+  "new": "0x140ae0a40",
+  "how": "resolver:high"
+ },
+ "TppGmPlayerImplAnonymous_namespaceCamouflageControllerImplInitialize": {
+  "old": "0x140fdd420",
+  "new": "0x140fdcc00",
+  "how": "resolver:high"
+ },
+ "FoxNtImplTransceiverManagerImplPeerAddToSendQueue": {
+  "old": "0x143e78970",
+  "new": "0x1403197d0",
+  "how": "manual: alignment + prologue"
+ },
+ "FoxNioImplMpMuxImplSendUpdate": {
+  "old": "0x141a5a6c0",
+  "new": "0x141a5a380",
+  "how": "resolver:high"
+ },
+ "FoxNioImplSppSocketImplSendImpl": {
+  "old": "0x141a57b00",
+  "new": "0x141a57840",
+  "how": "resolver:high"
+ },
+ "FoxNioImplSteamUdpSocketImplSend": {
+  "old": "0x14c4044f0",
+  "new": "0x141a5fb60",
+  "how": "resolver:high"
+ },
+ "FoxNioImplSteamUdpSocketImplRecv": {
+  "old": "0x14c4042c0",
+  "new": "0x141a5fac0",
+  "how": "resolver:high"
+ },
+ "TppUiMenuUiCommonDataManagerLoadLanguageBlock": {
+  "old": "0x145bddb50",
+  "new": "0x140860fd0",
+  "how": "resolver:high"
+ },
+ "TppUiUtilityChangeLanguage": {
+  "old": "0x14090f130",
+  "new": "0x14090fa70",
+  "how": "resolver:high"
+ },
+ "TppGmPlayerImplEquipControllerImplInitialize": {
+  "old": "0x149a02ca0",
+  "new": "0x1411ad920",
+  "how": "resolver:high"
+ },
+ "TppGmPlayerImplEquipControllerImplGetEquipIdSlot": {
+  "old": "0x1411add10",
+  "new": "0x1411ad420",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplSetCommand": {
+  "old": "0x1417a9e40",
+  "new": "0x1417a9370",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplSetExtraActionCommand": {
+  "old": "0x14a922d70",
+  "new": "0x1417a9520",
+  "how": "resolver:high"
+ },
+ "TppGmLiquidImplActionControllerImplSetActionTaskCompleted": {
+  "old": "0x14bf31450",
+  "new": "0x140ce68e0",
+  "how": "manual: unique identical body (leaf)"
+ },
+ "TppGmBossquietImplActionControllerImplSetActionTask": {
+  "old": "0x14a922960",
+  "new": "0x1417a92d0",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplSetNextActionTask": {
+  "old": "0x1417aa020",
+  "new": "0x1417a9550",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplInitialize": {
+  "old": "0x14a921790",
+  "new": "0x1417a8fd0",
+  "how": "resolver:high"
+ },
+ "TppGmSahelanImplActionControllerImplSetTaskParamFromActionCommand": {
+  "old": "0x14bbbd160",
+  "new": "0x1418bfc40",
+  "how": "resolver:high"
+ },
+ "TppGmImplNavigationController2ImplGetNavigator": {
+  "old": "0x149586ed0",
+  "new": "0x140fa1cc0",
+  "how": "resolver:high"
+ },
+ "TppGmImplNavigationController2ImplIsCurrentRequestPrepared": {
+  "old": "0x149588720",
+  "new": "0x140fa2150",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplCheckUseOutOfNavJump": {
+  "old": "0x14a91ff50",
+  "new": "0x1417a8ad0",
+  "how": "resolver:high"
+ },
+ "TppGmImplNavigationController2ImplGetPath": {
+  "old": "0x1495879e0",
+  "new": "0x140fa1ed0",
+  "how": "manual: alignment"
+ },
+ "TppGmImplNavigationController2ImplGetResultState": {
+  "old": "0x149587cd0",
+  "new": "0x140fa1ef0",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplSnipeManagerImplGetOptimalLandingPosition": {
+  "old": "0x1417fa3d0",
+  "new": "0x1417f9b70",
+  "how": "resolver:high"
+ },
+ "TppGmSahelanActionTaskoperatorAssign": {
+  "old": "0x14a91f960",
+  "new": "0x1417a8600",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplUpdate": {
+  "old": "0x14a923930",
+  "new": "0x1417a9a30",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplBasicAction2ImplPolling": {
+  "old": "0x14b6bebe0",
+  "new": "0x1417ba910",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplUpdateActionTask": {
+  "old": "0x14a923c70",
+  "new": "0x1417a9ac0",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplActionControllerImplUpdateCommandForSingle": {
+  "old": "0x14a923f60",
+  "new": "0x1417a9b70",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplBasicAction2ImplGetNextPositionInMoving": {
+  "old": "0x14b6bd7c0",
+  "new": "0x1417ba250",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplCloseCombatAiImplStepMove": {
+  "old": "0x1417c9380",
+  "new": "0x1417c8700",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplRecoveryAiImplStepMove": {
+  "old": "0x1417f56b0",
+  "new": "0x1417f4e50",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplSearchAiImplStepMove": {
+  "old": "0x1417f8200",
+  "new": "0x1417f79a0",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplCombatAiImplRequestMoveAction": {
+  "old": "0x14b6d5970",
+  "new": "0x1417cac20",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplSearchAiImplRequestMoveAction": {
+  "old": "0x14b772070",
+  "new": "0x1417f7100",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplRecoveryAiImplRequestMoveAction": {
+  "old": "0x14b76a2f0",
+  "new": "0x1417f47b0",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplCloseCombatAiImplRequestMoveAction": {
+  "old": "0x14b6cd920",
+  "new": "0x1417c7d50",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplAvoidAiImplSetJumpPoint": {
+  "old": "0x14b6b87d0",
+  "new": "0x1417f14a0",
+  "how": "manual: unique identical body (ratio 1.0)"
+ },
+ "TppGmImplAiControllerImplGetCoreKnowledge": {
+  "old": "0x146d18c90",
+  "new": "0x140c0efd0",
+  "how": "resolver:high"
+ },
+ "TppGmBossquietImplanonymous_namespaceLifeControllerImplUpdateLife": {
+  "old": "0x14b73b3d0",
+  "new": "0x1417e8ab0",
+  "how": "resolver:high"
+ },
+ "BlockHeapAlloc": {
+  "old": "0x143264660",
+  "new": "0x1400dcb50",
+  "how": "resolver:high"
+ },
+ "BlockHeapFree": {
+  "old": "0x1432651b0",
+  "new": "0x1400dcbc0",
+  "how": "resolver:high"
+ },
+ "FoxBlockProcess": {
+  "old": "0x14006df80",
+  "new": "0x14006e4e0",
+  "how": "resolver:high"
+ },
+ "FoxBlockUnload": {
+  "old": "0x143154a00",
+  "new": "0x14006f990",
+  "how": "resolver:high"
+ },
+ "FoxBlockReload": {
+  "old": "0x1431533b0",
+  "new": "0x14006f320",
+  "how": "resolver:high"
+ },
+ "FoxBlockActivate": {
+  "old": "0x14006cb20",
+  "new": "0x14006cfb0",
+  "how": "resolver:high"
+ },
+ "FoxBlockDeactivate": {
+  "old": "0x14314a000",
+  "new": "0x14006d480",
+  "how": "resolver:high"
+ },
+ "FoxGenerateUniqueName": {
+  "old": "0x1400e0210",
+  "new": "0x14006bd90",
+  "how": "manual: 120/120 identical ins, 7/7 callers"
+ },
+ "FoxBlock": {
+  "old": "0x143145960",
+  "new": "0x14006c230",
+  "how": "resolver:high"
+ },
+ "FoxBlockLoad": {
+  "old": "0x143151e80",
+  "new": "0x14006e040",
+  "how": "resolver:high"
+ },
+ "BlockMemoryAllocTail": {
+  "old": "0x1400dbb30",
+  "new": "0x1400dbc20",
+  "how": "resolver:high"
+ },
+ "BlockMemoryAllocHeap": {
+  "old": "0x143261bf0",
+  "new": "0x1400dbab0",
+  "how": "resolver:high"
+ },
+ "GetCurrentBlockMemory": {
+  "old": "0x14328e410",
+  "new": "0x1400e63e0",
+  "how": "resolver:high"
+ },
+ "FoxCreateQuark": {
+  "old": "0x146c6a650",
+  "new": "0x140bf1650",
+  "how": "resolver:high"
+ },
+ "FoxLuaPushVector3": {
+  "old": "0x143257590",
+  "new": "0x1400d7c60",
+  "how": "resolver:high"
+ },
+ "FoxLuaPushQuat": {
+  "old": "0x143256e30",
+  "new": "0x1400d7ba0",
+  "how": "resolver:high"
+ },
+ "l_AnnounceLogView": {
+  "old": "0x145d5ded0",
+  "new": "0x1408cc6e0",
+  "how": "resolver:high"
+ },
+ "TppUiUiCommandAnnounceLogViewLangId": {
+  "old": "0x1408cc280",
+  "new": "0x1408ccbf0",
+  "how": "resolver:high"
+ },
+ "lua_pushinteger": {
+  "old": "0x14c1e6ef0",
+  "new": "0x141a11880",
+  "how": "resolver:high"
+ },
+ "lua_pushstring": {
+  "old": "0x14c1e7ee0",
+  "new": "0x141a11970",
+  "how": "resolver:high"
+ },
+ "lua_pushboolean": {
+  "old": "0x14c1db230",
+  "new": "0x141a11750",
+  "how": "resolver:high"
+ },
+ "lua_getfield": {
+  "old": "0x14c1d7320",
+  "new": "0x141a111e0",
+  "how": "resolver:high"
+ },
+ "lua_setfield": {
+  "old": "0x14c1eabb0",
+  "new": "0x141a11e00",
+  "how": "resolver:high"
+ },
+ "lua_pcall": {
+  "old": "0x14c1daff0",
+  "new": "0x141a116c0",
+  "how": "resolver:high"
+ },
+ "luaI_openlib": {
+  "old": "0x14c201610",
+  "new": "0x141a17c30",
+  "how": "resolver:high"
+ },
+ "luaL_checkinteger": {
+  "old": "0x14c1ff430",
+  "new": "0x141a16f40",
+  "how": "resolver:high"
+ },
+ "luaL_openlibs": {
+  "old": "0x14c1fd0c0",
+  "new": "0x141a16980",
+  "how": "resolver:high"
+ },
+ "luaL_checknumber": {
+  "old": "0x14c1ffb30",
+  "new": "0x141a17020",
+  "how": "resolver:high"
+ },
+ "lua_toboolean": {
+  "old": "0x14c1ebe40",
+  "new": "0x141a120c0",
+  "how": "resolver:high"
+ },
+ "lua_createtable": {
+  "old": "0x14c1d6320",
+  "new": "0x141a10e80",
+  "how": "resolver:high"
+ },
+ "lua_pushvalue": {
+  "old": "0x14c1e87e0",
+  "new": "0x141a119d0",
+  "how": "resolver:high"
+ },
+ "lua_remove": {
+  "old": "0x14c1ea0c0",
+  "new": "0x141a11c20",
+  "how": "resolver:high"
+ },
+ "luaL_checklstring": {
+  "old": "0x14c1ff790",
+  "new": "0x141a16f90",
+  "how": "resolver:high"
+ },
+ "lua_pushnumber": {
+  "old": "0x14c1e7dd0",
+  "new": "0x141a11950",
+  "how": "resolver:high"
+ }
+}
