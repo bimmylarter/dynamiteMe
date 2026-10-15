@@ -32,6 +32,12 @@ namespace Dynamite::CarryProbe {
         };
 
         Trace traces[maxTraces];
+
+        // soldier index -> pending action request block, learned from the action install write
+        // (1.0.15.4: 0x141372a50 copies a request into the soldier's action slot, rbx = request block)
+        constexpr uint64_t installWriteA = 0x141372b0c;
+        constexpr uint64_t installWriteB = 0x141372b5b;
+        std::atomic<uint64_t> requestBlock[512];
         std::atomic<int> traceCount{0};
         std::atomic<int> armedSoldier{noSoldier};
         uint64_t watched[3] = {0, 0, 0};
@@ -58,6 +64,12 @@ namespace Dynamite::CarryProbe {
             ctx->Dr6 = 0;
 
             const auto rip = ctx->Rip;
+            const auto exeRip = ToExe(rip);
+            const auto soldier = armedSoldier.load();
+            if ((exeRip == installWriteA || exeRip == installWriteB) && soldier >= 1024 && soldier < 1024 + 512) {
+                requestBlock[soldier - 1024] = ctx->Rbx; // rbx = request block (copy of r8) in 0x141372a50
+            }
+
             const auto n = std::min(traceCount.load(), maxTraces);
             for (int i = 0; i < n; i++) {
                 if (traces[i].rip == rip) {
@@ -219,6 +231,14 @@ namespace Dynamite::CarryProbe {
             out[0] = reinterpret_cast<uint64_t>(action + 0xb8);
             out[1] = reinterpret_cast<uint64_t>(r1);
             out[2] = 0;
+
+            // second pickup of the same soldier: watch his pending request block instead of state flags
+            const auto req = requestBlock[idx].load();
+            if (req != 0 && Readable(reinterpret_cast<void *>(req), 0x1a8)) {
+                out[1] = req + 0x198; // flags at +0x19e, counter at +0x1a0 is +0x1a0
+                out[2] = req;         // start of request
+                spdlog::info("[carryprobe] soldier {} request block {:#x} known, watching it", objectID, req);
+            }
             return true;
         }
 
@@ -258,9 +278,15 @@ namespace Dynamite::CarryProbe {
             }
         }
 
-        if (best == noSoldier || best == armedSoldier.load()) {
+        static uint64_t armedWithRequest = 0;
+        if (best == noSoldier) {
             return;
         }
+        const auto knownReq = requestBlock[best - 1024].load();
+        if (best == armedSoldier.load() && knownReq == armedWithRequest) {
+            return;
+        }
+        armedWithRequest = knownReq;
 
         uint64_t rec[3];
         if (!StateRecords(best, rec)) {
@@ -323,6 +349,9 @@ namespace Dynamite::CarryProbe {
                 t.r14,
                 t.r15);
             spdlog::info("[carryprobe] {} #{} stack{}", tag, i, frames);
+        }
+        if (soldier >= 1024 && soldier < 1024 + 512) {
+            spdlog::info("[carryprobe] {} soldier {} request block {:#x}", tag, soldier, requestBlock[soldier - 1024].load());
         }
         traceCount = 0;
     }
