@@ -285,9 +285,9 @@ namespace Dynamite::CarryProbe {
             rec[0],
             rec[1],
             rec[2],
-            *(uint64_t *)rec[0],
-            *(uint64_t *)rec[1],
-            *(uint64_t *)rec[2]);
+            rec[0] ? *(uint64_t *)rec[0] : 0,
+            rec[1] ? *(uint64_t *)rec[1] : 0,
+            rec[2] ? *(uint64_t *)rec[2] : 0);
     }
 
     void Dump(const std::string &tag) {
