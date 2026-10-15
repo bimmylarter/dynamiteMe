@@ -178,19 +178,44 @@ namespace Dynamite::CarryProbe {
         //   *(iface+0x50):  {+8 base}, 0xd0 bytes per soldier, current action id (u16) at +0xba
         //                   (soldier update reacts to its change, 0x141378475 in 1.0.15.4)
         //   *(iface+0x110): {+8 base, +0x10 count}, 0x28 bytes per soldier, state flags at +0 (read by GetStatus)
+        // true if [p, p+size) is committed readable memory
+        bool Readable(const void *p, const size_t size) {
+            if (p == nullptr) {
+                return false;
+            }
+            MEMORY_BASIC_INFORMATION mbi{};
+            if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0 || mbi.State != MEM_COMMIT) {
+                return false;
+            }
+            if ((mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) != 0) {
+                return false;
+            }
+            const auto end = (const char *)mbi.BaseAddress + mbi.RegionSize;
+            return (const char *)p + size <= end;
+        }
+
         bool StateRecords(const uint32_t objectID, uint64_t out[3]) {
             const auto iface = (char *)SoldierInterface(objectID);
-            if (iface == nullptr) {
+            if (!Readable(iface, 0x120)) {
+                spdlog::info("[carryprobe] soldier {} interface {} not readable", objectID, (void *)iface);
                 return false;
             }
             const auto idx = objectID - 1024;
             const auto actions = *(char **)(iface + 0x50);
             const auto t1 = *(char **)(iface + 0x110);
-            if (actions == nullptr || t1 == nullptr || idx >= *(uint32_t *)(t1 + 0x10)) {
+            spdlog::info("[carryprobe] soldier {} iface {} +0x50 {} +0x110 {}", objectID, (void *)iface, (void *)actions, (void *)t1);
+            if (!Readable(actions, 0x18) || !Readable(t1, 0x18) || idx >= *(uint32_t *)(t1 + 0x10)) {
+                spdlog::info("[carryprobe] soldier {} tables not readable", objectID);
                 return false;
             }
-            const auto action = *(char **)(actions + 8) + idx * 0xd0;
-            const auto r1 = *(char **)(t1 + 8) + idx * 0x28;
+            const auto actionBase = *(char **)(actions + 8);
+            const auto recBase = *(char **)(t1 + 8);
+            if (!Readable(actionBase + idx * 0xd0, 0xd0) || !Readable(recBase + idx * 0x28, 0x28)) {
+                spdlog::info("[carryprobe] soldier {} records not readable (actions {} records {})", objectID, (void *)actionBase, (void *)recBase);
+                return false;
+            }
+            const auto action = actionBase + idx * 0xd0;
+            const auto r1 = recBase + idx * 0x28;
             out[0] = reinterpret_cast<uint64_t>(action + 0xb8);
             out[1] = reinterpret_cast<uint64_t>(r1);
             out[2] = 0;
