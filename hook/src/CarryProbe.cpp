@@ -301,6 +301,72 @@ namespace Dynamite::CarryProbe {
             return oMessageHandler(self, result, index, msg);
         }
 
+        // v9: commands sent to players (and other non-soldier objects) through the game object manager,
+        // 1.0.15.4: 0x140bf3a80 (mgr, int *result, u16 id, cmd*), *(u64*)cmd = 48-bit hash
+        constexpr uint64_t objectCommand = 0x140bf3a80;
+        constexpr int maxSeenCmd = 1500;
+        uint64_t seenCmd[maxSeenCmd][3];
+        int seenCmdCount = 0;
+        std::atomic_flag cmdLock = ATOMIC_FLAG_INIT;
+
+        using ObjectCommandFunc = int *(__fastcall *)(void *mgr, int *result, uint64_t id, uint64_t *cmd);
+        ObjectCommandFunc oObjectCommand = nullptr;
+
+        int *__fastcall hkObjectCommand(void *mgr, int *result, uint64_t id, uint64_t *cmd) {
+            const auto oid = static_cast<uint16_t>(id);
+            if (oid < 0x400 && cmd != nullptr) {
+                const auto ret = ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0)));
+                const auto hash = cmd[0] & 0xffffffffffffull;
+                bool fresh = false;
+                while (cmdLock.test_and_set(std::memory_order_acquire)) {
+                }
+                int i = 0;
+                for (; i < seenCmdCount; i++) {
+                    if (seenCmd[i][0] == hash && seenCmd[i][1] == ret && seenCmd[i][2] == oid) {
+                        break;
+                    }
+                }
+                if (i == seenCmdCount && seenCmdCount < maxSeenCmd) {
+                    seenCmd[seenCmdCount][0] = hash;
+                    seenCmd[seenCmdCount][1] = ret;
+                    seenCmd[seenCmdCount][2] = oid;
+                    seenCmdCount++;
+                    fresh = true;
+                }
+                cmdLock.clear(std::memory_order_release);
+                if (fresh) {
+                    uint64_t body[6] = {};
+                    if (Readable(cmd, sizeof(body))) {
+                        memcpy(body, cmd, sizeof(body));
+                    }
+                    spdlog::info("[carryprobe] new cmd {:012x} to object {:#x} from {:#x}: {:016x} {:016x} {:016x} {:016x} {:016x}",
+                        hash, oid, ret, body[1], body[2], body[3], body[4], body[5]);
+                }
+            }
+            return oObjectCommand(mgr, result, id, cmd);
+        }
+
+        void InstallCommandHook() {
+            static bool done = false;
+            if (done) {
+                return;
+            }
+            done = true;
+            const auto target = reinterpret_cast<uint8_t *>(objectCommand - 0x140000000 + exeBase);
+            // mov [rsp+8], rbx; push rdi; sub rsp, 0x30
+            const uint8_t expected[] = {0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x30};
+            if (memcmp(target, expected, sizeof(expected)) != 0) {
+                spdlog::info("[carryprobe] object command function not found (game version?)");
+                return;
+            }
+            if (MH_CreateHook(target, reinterpret_cast<void *>(&hkObjectCommand), reinterpret_cast<void **>(&oObjectCommand)) != MH_OK ||
+                MH_EnableHook(target) != MH_OK) {
+                spdlog::info("[carryprobe] cannot hook object command function");
+                return;
+            }
+            spdlog::info("[carryprobe] object command function hooked");
+        }
+
         void InstallMessageHook() {
             static bool done = false;
             if (done) {
@@ -338,6 +404,7 @@ namespace Dynamite::CarryProbe {
             exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
         }
         InstallMessageHook();
+        InstallCommandHook();
         InstallCarryHooks();
         if (true) {
             return; // v8: passive logging only

@@ -170,7 +170,7 @@ namespace Dynamite::SoldierWarp {
         return false;
     }
 
-    int Warp(const uint32_t objectID, const float x, const float y, const float z) {
+    int Warp(const uint32_t objectID, const float x, const float y, const float z, const bool log) {
         if (capturedObjectID.load() != objectID || capturedController.load() == 0) {
             return 0;
         }
@@ -208,7 +208,9 @@ namespace Dynamite::SoldierWarp {
         reinterpret_cast<SetRotFunc>(objVtable[0x70 / 8])(obj, rot);
         reinterpret_cast<SetTransformFunc>(objVtable[0x68 / 8])(obj, pos, rot);
 
-        spdlog::info("{}, soldier {} moved to {} {} {}", __PRETTY_FUNCTION__, objectID, x, y, z);
+        if (log) {
+            spdlog::info("{}, soldier {} moved to {} {} {}", __PRETTY_FUNCTION__, objectID, x, y, z);
+        }
         return 1;
     }
 }

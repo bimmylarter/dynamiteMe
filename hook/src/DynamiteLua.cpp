@@ -3,6 +3,7 @@
 #include "CarryProbe.h"
 #include <map>
 #include <set>
+#include "BodyFollow.h"
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "lua/lauxlib.h"
@@ -427,6 +428,9 @@ namespace Dynamite {
                 nextInfo = GetTickCount() + 10000;
             }
         }
+        // called every frame by body sync until queue is empty: move the body partner carries
+        BodyFollow::Tick();
+
         const auto u = g_hook->dynamiteSyncImpl.PopBodyUpdate();
         if (!u.has_value()) {
             return 0;
@@ -443,6 +447,7 @@ namespace Dynamite {
                 spdlog::info("[carryprobe] partner carrying body {}", u->objectID);
             }
         }
+        BodyFollow::OnUpdate(u->objectID, u->x, u->y, u->z, u->dropped);
 
         lua_pushinteger(L, u->objectID);
         lua_pushnumber(L, u->x);
