@@ -2535,6 +2535,7 @@ local dynBody = {
 	settleId = nil,
 	settleTime = 0,
 	remoteMoved = {},
+	soldierWarps = {},
 	enabled = false,
 }
 e.dynBody = dynBody
@@ -2566,6 +2567,7 @@ local function dynReset()
 	dynBody.pendingId = nil
 	dynBody.settleId = nil
 	dynBody.remoteMoved = {}
+	dynBody.soldierWarps = {}
 end
 
 -- returns x, y, z, rotY (degrees) of the body, nil if position is unavailable
@@ -2613,6 +2615,12 @@ local function dynApplyRemote(gameObjectId, x, y, z, rotY, dropped)
 		Dynamite.Log("body sync: warp failed for " .. tostring(gameObjectId) .. ": " .. tostring(err))
 	elseif dropped then
 		Dynamite.Log(string.format("body sync: placed %d at %.2f %.2f %.2f", gameObjectId, x, y, z))
+		-- soldiers ignore the Warp command, they are moved by the hook once it finds their character object
+		if Dynamite.WarpSoldier ~= nil
+			and GameObject.GetTypeIndex(gameObjectId) == TppGameObject.GAME_OBJECT_TYPE_SOLDIER2 then
+			dynBody.soldierWarps[gameObjectId] = { x = x, y = y, z = z, expire = dynNow() + 2.0 }
+			Dynamite.CaptureSoldier(gameObjectId)
+		end
 	end
 end
 
@@ -2646,6 +2654,22 @@ local function dynUpdate()
 			break
 		end
 		dynApplyRemote(id, x, y, z, rotY, dropped)
+	end
+
+	-- pending soldier moves: wait until the hook has found the soldier's character object, then move
+	for id, w in pairs(dynBody.soldierWarps) do
+		local res = Dynamite.WarpSoldier(id, w.x, w.y, w.z)
+		if res ~= 0 then
+			if res < 0 then
+				Dynamite.Log("body sync: soldier " .. tostring(id) .. " could not be moved")
+			end
+			dynBody.soldierWarps[id] = nil
+		elseif now > w.expire then
+			Dynamite.Log("body sync: soldier " .. tostring(id) .. " move timed out")
+			dynBody.soldierWarps[id] = nil
+		else
+			Dynamite.CaptureSoldier(id)
+		end
 	end
 
 	-- confirm local carry

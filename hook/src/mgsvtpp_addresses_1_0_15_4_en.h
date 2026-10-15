@@ -221,6 +221,10 @@ namespace Dynamite {
         {"lua_remove", 0x141a11c20},
         {"luaL_checklstring", 0x141a16f90},
         {"lua_pushnumber", 0x141a11950},
+
+        // not a function: instruction after the first store of soldier position in the per-frame soldier update,
+        // r14 = character controller, r12 = local index at this point; used by SoldierWarp to find soldier character
+        {"SoldierPositionWriter", 0x141377a83},
     };
 }
 

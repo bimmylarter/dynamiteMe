@@ -215,6 +215,10 @@ namespace Dynamite {
         {"luaL_checklstring", 0x14c1ff790},
         {"lua_pushnumber", 0x14c1e7dd0},
 
+        // not a function: instruction after the first store of soldier position in the per-frame soldier update,
+        // r14 = character controller, r12 = local index at this point; used by SoldierWarp to find soldier character
+        {"SoldierPositionWriter", 0x141378c93},
+
         // /*
         //                 {"StrCode64", 0x14c1bd730},
         //                 {"PathCode64", 0x14c1bd5d0},//tex TODO need to verify naming and purpose. technically this is PathFileNameExt64, but given that

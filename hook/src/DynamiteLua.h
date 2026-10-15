@@ -35,6 +35,8 @@ namespace Dynamite {
     int l_GetEquipIDInSlot(lua_State *L);
     int l_SendBodyPosition(lua_State *L);
     int l_PopBodyUpdate(lua_State *L);
+    int l_CaptureSoldier(lua_State *L);
+    int l_WarpSoldier(lua_State *L);
 }
 
 #endif // HOOK_DYNAMITELUA_H
