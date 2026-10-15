@@ -88,6 +88,7 @@ add_library(${PROJECT_NAME} SHARED
         src/dynamite.cpp
         src/DynamiteLua.cpp
         src/SoldierWarp.cpp
+        src/BodyFollow.cpp
         src/DynamiteHook.cpp
         src/main.cpp
         src/DInputProxy.cpp

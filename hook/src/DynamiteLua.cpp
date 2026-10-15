@@ -1,5 +1,6 @@
 #include "DynamiteLua.h"
 #include "SoldierWarp.h"
+#include "BodyFollow.h"
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "lua/lauxlib.h"
@@ -416,10 +417,15 @@ namespace Dynamite {
     // returns nothing (id == nil) when queue is empty
     // called from TppPlayer.Update on game thread
     int l_PopBodyUpdate(lua_State *L) {
+        // called every frame by body sync until queue is empty: move the body partner carries
+        BodyFollow::Tick();
+
         const auto u = g_hook->dynamiteSyncImpl.PopBodyUpdate();
         if (!u.has_value()) {
             return 0;
         }
+
+        BodyFollow::OnUpdate(u->objectID, u->x, u->y, u->z, u->dropped);
 
         lua_pushinteger(L, u->objectID);
         lua_pushnumber(L, u->x);
