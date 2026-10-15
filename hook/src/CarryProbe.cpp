@@ -6,6 +6,7 @@
 #include "mgsvtpp_func_typedefs.h"
 #include "spdlog/spdlog.h"
 #include "windows.h"
+#include "MinHook.h"
 
 #include <atomic>
 #include <intrin.h>
@@ -242,6 +243,99 @@ namespace Dynamite::CarryProbe {
             return true;
         }
 
+        // --- soldier message log ---
+        // 1.0.15.4: 0x141360f90 soldier message handler (this, int *result, uint32 soldierIndex, msg*), *(u64*)msg = 48-bit hash.
+        // Pickup request reaches the soldier through it (0x141364d8e forwards to action requester 0x1415541c0).
+        constexpr uint64_t soldierMessageHandler = 0x141360f90;
+        constexpr int maxMessages = 48;
+        struct Message {
+            uint64_t hash;
+            uint64_t ret;
+            uint32_t count;
+            uint32_t firstMs;
+            uint64_t body[12];
+        };
+        Message messages[maxMessages];
+        std::atomic<int> messageCount{0};
+        std::atomic_flag messageLock = ATOMIC_FLAG_INIT;
+        std::atomic<uint32_t> armTick{0};
+
+        using MessageHandlerFunc = void *(__fastcall *)(void *self, int *result, uint32_t index, uint64_t *msg);
+        MessageHandlerFunc oMessageHandler = nullptr;
+
+        void *__fastcall hkMessageHandler(void *self, int *result, uint32_t index, uint64_t *msg) {
+            const auto soldier = armedSoldier.load();
+            if (soldier >= 1024 && index == static_cast<uint32_t>(soldier - 1024) && msg != nullptr) {
+                const auto ret = ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0)));
+                const auto hash = msg[0] & 0xffffffffffffull;
+                while (messageLock.test_and_set(std::memory_order_acquire)) {
+                }
+                const auto n = std::min(messageCount.load(), maxMessages);
+                int i = 0;
+                for (; i < n; i++) {
+                    if (messages[i].hash == hash && messages[i].ret == ret) {
+                        messages[i].count++;
+                        break;
+                    }
+                }
+                if (i == n && n < maxMessages) {
+                    auto &m = messages[n];
+                    m.hash = hash;
+                    m.ret = ret;
+                    m.count = 1;
+                    m.firstMs = GetTickCount() - armTick.load();
+                    if (Readable(msg, sizeof(m.body))) {
+                        memcpy(m.body, msg, sizeof(m.body));
+                    } else {
+                        memset(m.body, 0, sizeof(m.body));
+                    }
+                    messageCount = n + 1;
+                }
+                messageLock.clear(std::memory_order_release);
+            }
+            return oMessageHandler(self, result, index, msg);
+        }
+
+        void InstallMessageHook() {
+            static bool done = false;
+            if (done) {
+                return;
+            }
+            done = true;
+            const auto target = reinterpret_cast<uint8_t *>(soldierMessageHandler - 0x140000000 + exeBase);
+            // mov rax, rsp; push rbp; push rbx; push rsi; push rdi; push r12
+            const uint8_t expected[] = {0x48, 0x8b, 0xc4, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54};
+            if (memcmp(target, expected, sizeof(expected)) != 0) {
+                spdlog::info("[carryprobe] soldier message handler not found (game version?), message log disabled");
+                return;
+            }
+            if (MH_CreateHook(target, reinterpret_cast<void *>(&hkMessageHandler), reinterpret_cast<void **>(&oMessageHandler)) != MH_OK ||
+                MH_EnableHook(target) != MH_OK) {
+                spdlog::info("[carryprobe] cannot hook soldier message handler");
+                return;
+            }
+            spdlog::info("[carryprobe] soldier message handler hooked");
+        }
+
+        void DumpMessages(const std::string &tag) {
+            while (messageLock.test_and_set(std::memory_order_acquire)) {
+            }
+            Message copy[maxMessages];
+            const auto n = std::min(messageCount.load(), maxMessages);
+            memcpy(copy, messages, sizeof(Message) * n);
+            messageCount = 0;
+            messageLock.clear(std::memory_order_release);
+
+            for (int i = 0; i < n; i++) {
+                const auto &m = copy[i];
+                std::string body;
+                for (int j = 1; j < 12; j++) {
+                    body += fmt::format(" {:016x}", m.body[j]);
+                }
+                spdlog::info("[carryprobe] {} msg {:012x} from {:#x} count {} at +{} ms:{}", tag, m.hash, m.ret, m.count, m.firstMs, body);
+            }
+        }
+
         float Distance(const Vector3 &a, const Vector3 &b) {
             const auto dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
             return std::sqrt(dx * dx + dy * dy + dz * dz);
@@ -297,7 +391,12 @@ namespace Dynamite::CarryProbe {
             vehHandle = AddVectoredExceptionHandler(1, Handler);
         }
 
+        InstallMessageHook();
         traceCount = 0;
+        if (best != armedSoldier.load()) {
+            messageCount = 0;
+        }
+        armTick = GetTickCount();
         memcpy(watched, rec, sizeof(watched));
         armedSoldier = best;
         std::thread([rec] {
@@ -354,6 +453,7 @@ namespace Dynamite::CarryProbe {
             spdlog::info("[carryprobe] {} soldier {} request block {:#x}", tag, soldier, requestBlock[soldier - 1024].load());
         }
         traceCount = 0;
+        DumpMessages(tag);
     }
 
     void Disarm() {
