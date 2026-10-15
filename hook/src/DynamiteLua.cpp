@@ -419,28 +419,28 @@ namespace Dynamite {
     // returns nothing (id == nil) when queue is empty
     // called from TppPlayer.Update on game thread
     int l_PopBodyUpdate(lua_State *L) {
-        CarryProbe::InstallCarryHooks();
+        {
+            static uint32_t nextInfo = 0;
+            if (GetTickCount() >= nextInfo) {
+                CarryProbe::ArmNearest(); // v8: installs logging hooks only
+                CarryProbe::LogInfo();
+                nextInfo = GetTickCount() + 10000;
+            }
+        }
         const auto u = g_hook->dynamiteSyncImpl.PopBodyUpdate();
         if (!u.has_value()) {
             return 0;
         }
 
-        // research: partner carries this body, try to make it carried by partner's player here too
+        // research v8: passive logging only
         {
-            static std::set<uint32_t> attached;
-            static std::map<uint32_t, uint32_t> nextTry;
+            static std::set<uint32_t> carrying;
             if (u->dropped) {
-                if (attached.erase(u->objectID) > 0) {
-                    spdlog::info("[carryprobe] partner dropped attached body {}", u->objectID);
+                if (carrying.erase(u->objectID) > 0) {
+                    spdlog::info("[carryprobe] partner dropped body {}", u->objectID);
                 }
-                nextTry.erase(u->objectID);
-            } else if (u->objectID >= 1024 && !attached.contains(u->objectID) && GetTickCount() >= nextTry[u->objectID]) {
-                const auto res = CarryProbe::Attach(u->objectID, -1);
-                if (res != 0) {
-                    attached.insert(u->objectID);
-                } else {
-                    nextTry[u->objectID] = GetTickCount() + 1000;
-                }
+            } else if (carrying.insert(u->objectID).second) {
+                spdlog::info("[carryprobe] partner carrying body {}", u->objectID);
             }
         }
 

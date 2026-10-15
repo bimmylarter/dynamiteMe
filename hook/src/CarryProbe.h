@@ -21,6 +21,9 @@ namespace Dynamite::CarryProbe {
     // experiment: make soldier carried by player (default: remote player). 1 sent, 0 not ready, -1 failed
     int Attach(uint32_t soldierID, int playerIndex = -1);
 
+    // v8: log carry component / network info
+    void LogInfo();
+
     // stop watching
     void Disarm();
 }

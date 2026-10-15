@@ -264,35 +264,39 @@ namespace Dynamite::CarryProbe {
         using MessageHandlerFunc = void *(__fastcall *)(void *self, int *result, uint32_t index, uint64_t *msg);
         MessageHandlerFunc oMessageHandler = nullptr;
 
+        // v8: log first occurrence of every (message, caller) pair for any soldier
+        constexpr int maxSeen = 400;
+        uint64_t seen[maxSeen][2];
+        int seenCount = 0;
+
         void *__fastcall hkMessageHandler(void *self, int *result, uint32_t index, uint64_t *msg) {
-            const auto soldier = armedSoldier.load();
-            if (soldier >= 1024 && index == static_cast<uint32_t>(soldier - 1024) && msg != nullptr) {
+            if (msg != nullptr) {
                 const auto ret = ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0)));
                 const auto hash = msg[0] & 0xffffffffffffull;
+                bool fresh = false;
                 while (messageLock.test_and_set(std::memory_order_acquire)) {
                 }
-                const auto n = std::min(messageCount.load(), maxMessages);
                 int i = 0;
-                for (; i < n; i++) {
-                    if (messages[i].hash == hash && messages[i].ret == ret) {
-                        messages[i].count++;
+                for (; i < seenCount; i++) {
+                    if (seen[i][0] == hash && seen[i][1] == ret) {
                         break;
                     }
                 }
-                if (i == n && n < maxMessages) {
-                    auto &m = messages[n];
-                    m.hash = hash;
-                    m.ret = ret;
-                    m.count = 1;
-                    m.firstMs = GetTickCount() - armTick.load();
-                    if (Readable(msg, sizeof(m.body))) {
-                        memcpy(m.body, msg, sizeof(m.body));
-                    } else {
-                        memset(m.body, 0, sizeof(m.body));
-                    }
-                    messageCount = n + 1;
+                if (i == seenCount && seenCount < maxSeen) {
+                    seen[seenCount][0] = hash;
+                    seen[seenCount][1] = ret;
+                    seenCount++;
+                    fresh = true;
                 }
                 messageLock.clear(std::memory_order_release);
+                if (fresh) {
+                    uint64_t body[8] = {};
+                    if (Readable(msg, sizeof(body))) {
+                        memcpy(body, msg, sizeof(body));
+                    }
+                    spdlog::info("[carryprobe] new msg {:012x} to soldier {} from {:#x}: {:016x} {:016x} {:016x} {:016x} {:016x} {:016x} {:016x}",
+                        hash, index + 1024, ret, body[1], body[2], body[3], body[4], body[5], body[6], body[7]);
+                }
             }
             return oMessageHandler(self, result, index, msg);
         }
@@ -318,24 +322,7 @@ namespace Dynamite::CarryProbe {
             spdlog::info("[carryprobe] soldier message handler hooked");
         }
 
-        void DumpMessages(const std::string &tag) {
-            while (messageLock.test_and_set(std::memory_order_acquire)) {
-            }
-            Message copy[maxMessages];
-            const auto n = std::min(messageCount.load(), maxMessages);
-            memcpy(copy, messages, sizeof(Message) * n);
-            messageCount = 0;
-            messageLock.clear(std::memory_order_release);
-
-            for (int i = 0; i < n; i++) {
-                const auto &m = copy[i];
-                std::string body;
-                for (int j = 1; j < 12; j++) {
-                    body += fmt::format(" {:016x}", m.body[j]);
-                }
-                spdlog::info("[carryprobe] {} msg {:012x} from {:#x} count {} at +{} ms:{}", tag, m.hash, m.ret, m.count, m.firstMs, body);
-            }
-        }
+        void DumpMessages(const std::string &) {}
 
         float Distance(const Vector3 &a, const Vector3 &b) {
             const auto dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
@@ -345,6 +332,16 @@ namespace Dynamite::CarryProbe {
 
     void ArmNearest() {
         std::lock_guard lock(armMutex);
+        if (exeEnd == 0) {
+            const auto dos = reinterpret_cast<IMAGE_DOS_HEADER *>(exeBase);
+            const auto nt = reinterpret_cast<IMAGE_NT_HEADERS64 *>(exeBase + dos->e_lfanew);
+            exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
+        }
+        InstallMessageHook();
+        InstallCarryHooks();
+        if (true) {
+            return; // v8: passive logging only
+        }
 
         if (exeEnd == 0) {
             const auto dos = reinterpret_cast<IMAGE_DOS_HEADER *>(exeBase);
@@ -418,6 +415,9 @@ namespace Dynamite::CarryProbe {
     }
 
     void Dump(const std::string &tag) {
+        if (armedSoldier.load() == noSoldier) {
+            return;
+        }
         const auto soldier = armedSoldier.load();
         const auto n = std::min(traceCount.load(), maxTraces);
         spdlog::info("[carryprobe] {} soldier {}: {} unique writers, records now {:#x} {:#x} {:#x}",
@@ -577,6 +577,27 @@ namespace Dynamite::CarryProbe {
         send(mgr, &result, soldierID, cmd);
         spdlog::info("[carryprobe] attach {}: phase 2 result {:#x}", soldierID, (uint32_t)result);
         return 1;
+    }
+
+    void LogInfo() {
+        const auto comp = reinterpret_cast<char *>(carryComponent.load());
+        if (comp == nullptr) {
+            return;
+        }
+        const auto ctx = *(char **)(comp + 0x8);
+        const auto info = *(char **)(comp + 0x38);
+        if (!Readable(ctx, 0x40) || !Readable(info, 0x28)) {
+            spdlog::info("[carryprobe] info: component {} not readable", (void *)comp);
+            return;
+        }
+        const auto net = *(char **)(ctx + 0x138);
+        uint32_t flags = 0, localIdx = 0xffffffff;
+        if (Readable(net, 0x220)) {
+            flags = *(uint32_t *)(net + 0x204);
+            localIdx = *(uint32_t *)(net + 0x218);
+        }
+        spdlog::info("[carryprobe] info: component {} player slots {} first player {} net flags {:#x} (online bit {}) local player {} host {}",
+            (void *)comp, *(uint32_t *)(ctx + 8), *(uint32_t *)(info + 0x24), flags, (flags >> 8) & 1, localIdx, g_hook->cfg.Host);
     }
 
     void Disarm() {
