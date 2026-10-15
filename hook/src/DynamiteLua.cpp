@@ -1,5 +1,6 @@
 #include "DynamiteLua.h"
 #include "SoldierWarp.h"
+#include "CarryProbe.h"
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "lua/lauxlib.h"
@@ -450,6 +451,20 @@ namespace Dynamite {
         return 1;
     }
 
+    // research: Dynamite.CarryProbeArm()
+    int l_CarryProbeArm(lua_State *L) {
+        CarryProbe::ArmNearest();
+        return 0;
+    }
+
+    // research: Dynamite.CarryProbeDump(tag)
+    int l_CarryProbeDump(lua_State *L) {
+        size_t len;
+        const auto tag = luaL_checklstring(L, 1, &len);
+        CarryProbe::Dump(tag);
+        return 0;
+    }
+
     // int l_GetCamoRate(lua_State *L) {
     //     // wrong!
     //     // auto lvar8 = *(uint32_t *)((char *)camouflageControllerImpl + 0x38);
@@ -493,6 +508,8 @@ namespace Dynamite {
             {"PopBodyUpdate", l_PopBodyUpdate},
             {"CaptureSoldier", l_CaptureSoldier},
             {"WarpSoldier", l_WarpSoldier},
+            {"CarryProbeArm", l_CarryProbeArm},
+            {"CarryProbeDump", l_CarryProbeDump},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);

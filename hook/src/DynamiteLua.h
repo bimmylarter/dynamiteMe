@@ -37,6 +37,8 @@ namespace Dynamite {
     int l_PopBodyUpdate(lua_State *L);
     int l_CaptureSoldier(lua_State *L);
     int l_WarpSoldier(lua_State *L);
+    int l_CarryProbeArm(lua_State *L);
+    int l_CarryProbeDump(lua_State *L);
 }
 
 #endif // HOOK_DYNAMITELUA_H

@@ -2536,6 +2536,8 @@ local dynBody = {
 	settleTime = 0,
 	remoteMoved = {},
 	soldierWarps = {},
+	probeNextArm = 0,
+	probeDumps = {},
 	enabled = false,
 }
 e.dynBody = dynBody
@@ -2656,6 +2658,21 @@ local function dynUpdate()
 		dynApplyRemote(id, x, y, z, rotY, dropped)
 	end
 
+	-- research build: watch nearest downed soldier, dump traces after pickup / putdown
+	if Dynamite.CarryProbeArm ~= nil then
+		if dynBody.carriedId == nil and dynBody.pendingId == nil and now >= dynBody.probeNextArm then
+			Dynamite.CarryProbeArm()
+			dynBody.probeNextArm = now + 1.0
+		end
+		for i = #dynBody.probeDumps, 1, -1 do
+			local d = dynBody.probeDumps[i]
+			if now >= d.time then
+				Dynamite.CarryProbeDump(d.tag)
+				table.remove(dynBody.probeDumps, i)
+			end
+		end
+	end
+
 	-- pending soldier moves: wait until the hook has found the soldier's character object, then move
 	for id, w in pairs(dynBody.soldierWarps) do
 		local res = Dynamite.WarpSoldier(id, w.x, w.y, w.z)
@@ -2676,6 +2693,9 @@ local function dynUpdate()
 	if dynBody.pendingId ~= nil then
 		if dynIsCarried(dynBody.pendingId) then
 			Dynamite.Log("body sync: carrying " .. tostring(dynBody.pendingId))
+			if Dynamite.CarryProbeDump ~= nil then
+				table.insert(dynBody.probeDumps, { tag = "pickup", time = now + 1.5 })
+			end
 			if dynBody.carriedId ~= nil and dynBody.carriedId ~= dynBody.pendingId then
 				dynSend(dynBody.carriedId, true)
 			end
@@ -2700,6 +2720,9 @@ local function dynUpdate()
 			end
 		else
 			dynSend(id, true)
+			if Dynamite.CarryProbeDump ~= nil then
+				table.insert(dynBody.probeDumps, { tag = "putdown", time = now + 2.0 })
+			end
 			dynBody.carriedId = nil
 			dynBody.settleId = id
 			dynBody.settleTime = now + dynBody.SETTLE_TIME
