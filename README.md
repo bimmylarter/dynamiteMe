@@ -1,6 +1,6 @@
 dynamite
 ===
-
+**THIS IS A CLAUDE MADE MOD TO FIX THE MOD ON THE NEWEST VERSION AS WELL AS ATTEMPT TO MAKE CARRYING BODIES SYNC, AS OF NOW THIS MASTER ALLOWS BODIES TO BE TELEPORTED TO WHERE THE CLIENT/HOST DROP THEM**
 dynamite is a 2 player co-op mod for Metal Gear Solid V: The Phantom Pain in early development stage.
 
 > [!NOTE]
