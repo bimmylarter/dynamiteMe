@@ -8,6 +8,7 @@
 #include "windows.h"
 
 #include <atomic>
+#include <intrin.h>
 #include <cmath>
 #include <cstring>
 #include <mutex>
@@ -115,9 +116,14 @@ namespace Dynamite::CarryProbe {
             t.r14 = ctx->R14;
             t.r15 = ctx->R15;
 
-            // crude stack walk: return addresses found on stack
-            const auto sp = reinterpret_cast<const uint64_t *>(ctx->Rsp);
-            for (int i = 0; i < 512 && t.frameCount < maxFrames; i++) {
+            // crude stack walk: return addresses found on stack, bounded by this thread's stack
+            // (exception handler runs on the faulting thread, so the current TEB describes its stack)
+            const auto stackBase = __readgsqword(0x08); // NT_TIB.StackBase
+            const auto rsp = ctx->Rsp & ~7ull;
+            const auto available = rsp < stackBase ? (stackBase - rsp) / 8 : 0;
+            const auto limit = std::min<uint64_t>(512, available);
+            const auto sp = reinterpret_cast<const uint64_t *>(rsp);
+            for (uint64_t i = 0; i < limit && t.frameCount < maxFrames; i++) {
                 const auto v = sp[i];
                 if (LooksLikeReturn(v)) {
                     t.frames[t.frameCount++] = v;
