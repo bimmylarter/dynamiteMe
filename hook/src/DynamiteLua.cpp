@@ -1,4 +1,5 @@
 #include "DynamiteLua.h"
+#include "SoldierWarp.h"
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "lua/lauxlib.h"
@@ -430,6 +431,25 @@ namespace Dynamite {
         return 6;
     }
 
+    // Dynamite.CaptureSoldier(gameObjectId) -> true when soldier can be moved with Dynamite.WarpSoldier
+    // starts capture otherwise; call again on next frames
+    int l_CaptureSoldier(lua_State *L) {
+        const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        lua_pushboolean(L, SoldierWarp::Capture(objectID));
+        return 1;
+    }
+
+    // Dynamite.WarpSoldier(gameObjectId, x, y, z) -> 1 moved, 0 not captured yet, -1 failed
+    int l_WarpSoldier(lua_State *L) {
+        const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        const auto res = SoldierWarp::Warp(objectID,
+            static_cast<float>(luaL_checknumber(L, 2)),
+            static_cast<float>(luaL_checknumber(L, 3)),
+            static_cast<float>(luaL_checknumber(L, 4)));
+        lua_pushinteger(L, res);
+        return 1;
+    }
+
     // int l_GetCamoRate(lua_State *L) {
     //     // wrong!
     //     // auto lvar8 = *(uint32_t *)((char *)camouflageControllerImpl + 0x38);
@@ -471,6 +491,8 @@ namespace Dynamite {
             {"GetEquipIDInSlot", l_GetEquipIDInSlot},
             {"SendBodyPosition", l_SendBodyPosition},
             {"PopBodyUpdate", l_PopBodyUpdate},
+            {"CaptureSoldier", l_CaptureSoldier},
+            {"WarpSoldier", l_WarpSoldier},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);
