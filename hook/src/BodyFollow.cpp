@@ -19,7 +19,7 @@ namespace Dynamite::BodyFollow {
         constexpr float snapDistance = 6.0f; // jump straight to target if further away than this
         // The carrier's game reports a carried body at the height it was picked up from, so the body is held
         // above the partner's character instead: carrier position (feet) + shoulder height.
-        constexpr float shoulderHeight = 1.25f;
+        constexpr float shoulderHeight = 0.15f; // a ragdolled soldier sinks back from shoulder height and contorts, keep it at the feet
         constexpr float maxCarrierDistance = 4.0f; // use carrier position only if body update agrees with it
 
         uint32_t followID = noBody;
@@ -28,6 +28,7 @@ namespace Dynamite::BodyFollow {
         float target[3] = {0, 0, 0};
         double lastUpdate = 0;
         double lastTick = 0;
+        double followStart = 0;
 
         double Now() {
             static LARGE_INTEGER freq{};
@@ -58,6 +59,7 @@ namespace Dynamite::BodyFollow {
         if (objectID != followID) {
             spdlog::info("BodyFollow, following soldier {} carried by partner", objectID);
             followID = objectID;
+            followStart = Now();
             havePos = false;
         }
         target[0] = x;
@@ -117,6 +119,10 @@ namespace Dynamite::BodyFollow {
             havePos = false; // recapture on next frame
         }
     }
+
+    uint32_t FollowedID() { return followID; }
+
+    double FollowedFor() { return followID == noBody ? 0.0 : Now() - followStart; }
 
     void Reset() {
         followID = noBody;

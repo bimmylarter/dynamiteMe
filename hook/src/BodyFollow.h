@@ -15,6 +15,10 @@ namespace Dynamite::BodyFollow {
     // move followed body, call every frame on game thread
     void Tick();
 
+    // soldier currently followed (0xffffffff if none), and for how long (seconds)
+    uint32_t FollowedID();
+    double FollowedFor();
+
     // forget followed body (session end)
     void Reset();
 }

@@ -1,6 +1,8 @@
 #include "PlayerProbe.h"
 
+#include "BodyFollow.h"
 #include "DynamiteHook.h"
+#include "MinHook.h"
 #include "dynamite.h"
 #include "spdlog/spdlog.h"
 #include "windows.h"
@@ -170,6 +172,71 @@ namespace Dynamite::PlayerProbe {
             return ok == 1;
         }
 
+        // --- per-player state arrays (read by the PlayerInfoService update 0x1412ce870, rcx = updater) ---
+        // state = *(*(updater + 0x50) + 0x60):
+        //   +0x18 u16[] action state code, +0x20 u8[], +0x28 u8[] carrying (1 -> info +0xd0 bit 0x40),
+        //   +0x30 u8[] stance (1 stand, 2 squat, 3/4 crawl), +0x38 u8[] speed, +0xd8 u16[] carried object, +0xe0 u16[]
+        constexpr uint64_t infoUpdate = 0x1412ce870;
+        using InfoUpdateFunc = void *(__fastcall *)(void *self, void *a2, void *a3, void *a4);
+        InfoUpdateFunc oInfoUpdate = nullptr;
+        std::atomic<uint64_t> infoUpdater{0};
+
+        void *__fastcall hkInfoUpdate(void *self, void *a2, void *a3, void *a4) {
+            infoUpdater = reinterpret_cast<uint64_t>(self);
+            return oInfoUpdate(self, a2, a3, a4);
+        }
+
+        void InstallInfoHook() {
+            static bool done = false;
+            if (done) {
+                return;
+            }
+            done = true;
+            const uint8_t expected[] = {0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x10, 0x48, 0x89, 0x70, 0x18};
+            if (memcmp(Exe(infoUpdate), expected, sizeof(expected)) != 0) {
+                spdlog::info("[playerprobe] info update function not found");
+                return;
+            }
+            if (MH_CreateHook(Exe(infoUpdate), reinterpret_cast<void *>(&hkInfoUpdate), reinterpret_cast<void **>(&oInfoUpdate)) != MH_OK ||
+                MH_EnableHook(Exe(infoUpdate)) != MH_OK) {
+                spdlog::info("[playerprobe] cannot hook info update");
+                return;
+            }
+            spdlog::info("[playerprobe] info update hooked");
+        }
+
+        char *StateArrays() {
+            const auto u = reinterpret_cast<char *>(infoUpdater.load());
+            if (u == nullptr) {
+                return nullptr;
+            }
+            const auto a = *(char **)(u + 0x50);
+            return a ? *(char **)(a + 0x60) : nullptr;
+        }
+
+        struct PlayerState {
+            uint16_t code;
+            uint8_t b20, carry, stance, speed;
+            uint16_t target, other;
+            bool operator==(const PlayerState &) const = default;
+        };
+
+        PlayerState ReadState(char *st, const int p) {
+            PlayerState s{};
+            s.code = (*(uint16_t **)(st + 0x18))[p];
+            s.b20 = (*(uint8_t **)(st + 0x20))[p];
+            s.carry = (*(uint8_t **)(st + 0x28))[p];
+            s.stance = (*(uint8_t **)(st + 0x30))[p];
+            s.speed = (*(uint8_t **)(st + 0x38))[p];
+            s.target = (*(uint16_t **)(st + 0xd8))[p];
+            s.other = (*(uint16_t **)(st + 0xe0))[p];
+            return s;
+        }
+
+        PlayerState lastState[2]{};
+        bool haveState = false;
+        bool injecting = false;
+
         void DumpWriters() {
             const auto n = std::min(writerCount.load(), maxWriters);
             spdlog::info("[playerprobe] remote player record writers: {}", n);
@@ -212,6 +279,37 @@ namespace Dynamite::PlayerProbe {
             watchDone = true;
             std::thread([] { SetBreakpoints(0, 0); }).detach();
             DumpWriters();
+        }
+
+        InstallInfoHook();
+
+        // experiment: while partner carries a soldier (3 s in), mark partner as carrying in the state arrays
+        if (auto st = StateArrays()) {
+            const auto followed = BodyFollow::FollowedID();
+            const bool want = followed != 0xffffffff && BodyFollow::FollowedFor() > 3.0;
+            if (want) {
+                (*(uint8_t **)(st + 0x28))[remote] = 1;
+                (*(uint16_t **)(st + 0xd8))[remote] = static_cast<uint16_t>(followed);
+                if (!injecting) {
+                    spdlog::info("[playerprobe] inject: partner {} marked as carrying {}", remote, followed);
+                }
+                injecting = true;
+            } else if (injecting) {
+                (*(uint8_t **)(st + 0x28))[remote] = 0;
+                (*(uint16_t **)(st + 0xd8))[remote] = 0xffff;
+                injecting = false;
+                spdlog::info("[playerprobe] inject: partner {} carry mark removed", remote);
+            }
+
+            for (int p = 0; p < 2; p++) {
+                const auto cur = ReadState(st, p);
+                if (!haveState || !(cur == lastState[p])) {
+                    spdlog::info("[playerprobe] state player {}{}: code {:#x} b20 {} carry {} stance {} speed {} target {:#x} other {:#x}",
+                        p, p == remote ? " (partner)" : " (me)", cur.code, cur.b20, cur.carry, cur.stance, cur.speed, cur.target, cur.other);
+                    lastState[p] = cur;
+                }
+            }
+            haveState = true;
         }
 
         // record field changes, twice a second
