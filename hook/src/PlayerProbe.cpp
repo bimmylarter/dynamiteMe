@@ -64,10 +64,15 @@ namespace Dynamite::PlayerProbe {
                 return EXCEPTION_CONTINUE_SEARCH;
             }
             auto *ctx = info->ContextRecord;
-            if ((ctx->Dr6 & 6) == 0 || !watching.load()) {
+            if ((ctx->Dr6 & 6) == 0) {
                 return EXCEPTION_CONTINUE_SEARCH;
             }
             ctx->Dr6 = 0;
+            if (!watching.load()) {
+                // late hit after watching stopped: switch our slots off on this thread and carry on
+                ctx->Dr7 &= ~dr7Mask;
+                return EXCEPTION_CONTINUE_EXECUTION;
+            }
 
             const auto rip = ctx->Rip;
             const auto n = std::min(writerCount.load(), maxWriters);
@@ -190,7 +195,7 @@ namespace Dynamite::PlayerProbe {
         const int remote = g_hook->cfg.Host ? 1 : 0;
 
         // catch writers of remote player's record once, 20 s into the mission, for 3 seconds
-        if (!watchDone && !watching.load() && now - firstTick > 20.0) {
+        if (false && !watchDone && !watching.load() && now - firstTick > 20.0) { // v12: disabled, writers found (0x1412cf26a)
             if (vehHandle == nullptr) {
                 vehHandle = AddVectoredExceptionHandler(1, Handler);
             }
@@ -224,8 +229,8 @@ namespace Dynamite::PlayerProbe {
             if (havePrevious) {
                 std::string changed;
                 for (size_t i = 0; i < infoSize / 4; i++) {
-                    // skip position (+0x10..+0x1c), changes constantly while moving
-                    if (i >= 4 && i < 8) {
+                    // skip positions / vectors (+0x10..+0x5c) and +0x98 (float), they change constantly while moving
+                    if ((i >= 4 && i < 0x18) || i == 0x98 / 4) {
                         continue;
                     }
                     if (cur[i] != previous[p][i]) {
