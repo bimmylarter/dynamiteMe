@@ -45,30 +45,6 @@ namespace Dynamite::CarryProbe {
 
         bool InExe(const uint64_t a) { return a > exeBase + 0x1000 && a < exeEnd; }
 
-        // return address heuristic: preceded by a call instruction
-        bool LooksLikeReturn(const uint64_t a) {
-            if (!InExe(a)) {
-                return false;
-            }
-            const auto p = reinterpret_cast<const uint8_t *>(a);
-            if (p[-5] == 0xE8) {
-                return true; // call rel32
-            }
-            if (p[-6] == 0xFF && (p[-5] & 0x38) == 0x10) {
-                return true; // call [rip+disp32] / [reg+disp32]
-            }
-            if (p[-3] == 0xFF && (p[-2] & 0x38) == 0x10) {
-                return true; // call [reg+disp8]
-            }
-            if (p[-7] == 0xFF && (p[-6] & 0x38) == 0x10) {
-                return true; // call [reg+disp32] with SIB
-            }
-            if (p[-2] == 0xFF && (p[-1] & 0x38) == 0x10) {
-                return true; // call reg / [reg]
-            }
-            return false;
-        }
-
         LONG WINAPI Handler(EXCEPTION_POINTERS *info) {
             if (info->ExceptionRecord->ExceptionCode != EXCEPTION_SINGLE_STEP) {
                 return EXCEPTION_CONTINUE_SEARCH;
@@ -116,18 +92,21 @@ namespace Dynamite::CarryProbe {
             t.r14 = ctx->R14;
             t.r15 = ctx->R15;
 
-            // crude stack walk: return addresses found on stack, bounded by this thread's stack
-            // (exception handler runs on the faulting thread, so the current TEB describes its stack)
-            const auto stackBase = __readgsqword(0x08); // NT_TIB.StackBase
-            const auto rsp = ctx->Rsp & ~7ull;
-            const auto available = rsp < stackBase ? (stackBase - rsp) / 8 : 0;
-            const auto limit = std::min<uint64_t>(512, available);
-            const auto sp = reinterpret_cast<const uint64_t *>(rsp);
-            for (uint64_t i = 0; i < limit && t.frameCount < maxFrames; i++) {
-                const auto v = sp[i];
-                if (LooksLikeReturn(v)) {
-                    t.frames[t.frameCount++] = v;
+            // exact call chain using exe unwind tables (no allocation, safe in exception handler)
+            CONTEXT walk = *ctx;
+            for (int f = 0; f < maxFrames; f++) {
+                DWORD64 imageBase = 0;
+                const auto fn = RtlLookupFunctionEntry(walk.Rip, &imageBase, nullptr);
+                if (fn == nullptr) {
+                    break;
                 }
+                PVOID handlerData = nullptr;
+                DWORD64 establisher = 0;
+                RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, walk.Rip, fn, &walk, &handlerData, &establisher, nullptr);
+                if (walk.Rip == 0 || !InExe(walk.Rip)) {
+                    break;
+                }
+                t.frames[t.frameCount++] = walk.Rip;
             }
 
             return EXCEPTION_CONTINUE_EXECUTION;
@@ -195,28 +174,26 @@ namespace Dynamite::CarryProbe {
             return (char *)iface - 0xc;
         }
 
-        // records read by soldier GetStatus (1.0.15.x):
-        //   *(iface+0x110): {+8 base, +0x10 count}, 0x28 bytes per soldier, flags at +0 and +0x10
-        //   *(iface+0x98):  {+8 base, +0x10 count}, 0x70 bytes per soldier, sub state at +0x34
+        // watched soldier fields (1.0.15.x):
+        //   *(iface+0x50):  {+8 base}, 0xd0 bytes per soldier, current action id (u16) at +0xba
+        //                   (soldier update reacts to its change, 0x141378475 in 1.0.15.4)
+        //   *(iface+0x110): {+8 base, +0x10 count}, 0x28 bytes per soldier, state flags at +0 (read by GetStatus)
         bool StateRecords(const uint32_t objectID, uint64_t out[3]) {
             const auto iface = (char *)SoldierInterface(objectID);
             if (iface == nullptr) {
                 return false;
             }
             const auto idx = objectID - 1024;
+            const auto actions = *(char **)(iface + 0x50);
             const auto t1 = *(char **)(iface + 0x110);
-            const auto t2 = *(char **)(iface + 0x98);
-            if (t1 == nullptr || t2 == nullptr) {
+            if (actions == nullptr || t1 == nullptr || idx >= *(uint32_t *)(t1 + 0x10)) {
                 return false;
             }
-            if (idx >= *(uint32_t *)(t1 + 0x10) || idx >= *(uint32_t *)(t2 + 0x10)) {
-                return false;
-            }
+            const auto action = *(char **)(actions + 8) + idx * 0xd0;
             const auto r1 = *(char **)(t1 + 8) + idx * 0x28;
-            const auto r2 = *(char **)(t2 + 8) + idx * 0x70;
-            out[0] = reinterpret_cast<uint64_t>(r1);
-            out[1] = reinterpret_cast<uint64_t>(r1 + 0x10);
-            out[2] = reinterpret_cast<uint64_t>(r2 + 0x30);
+            out[0] = reinterpret_cast<uint64_t>(action + 0xb8);
+            out[1] = reinterpret_cast<uint64_t>(r1);
+            out[2] = 0;
             return true;
         }
 
