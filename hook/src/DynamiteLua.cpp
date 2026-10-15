@@ -4,6 +4,7 @@
 #include <map>
 #include <set>
 #include "BodyFollow.h"
+#include "PlayerProbe.h"
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "lua/lauxlib.h"
@@ -430,6 +431,7 @@ namespace Dynamite {
         }
         // called every frame by body sync until queue is empty: move the body partner carries
         BodyFollow::Tick();
+        PlayerProbe::Tick(); // research
 
         const auto u = g_hook->dynamiteSyncImpl.PopBodyUpdate();
         if (!u.has_value()) {
