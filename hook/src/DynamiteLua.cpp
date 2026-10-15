@@ -1,4 +1,5 @@
 #include "DynamiteLua.h"
+#include "DynamiteProbe.h"
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "lua/lauxlib.h"
@@ -430,6 +431,24 @@ namespace Dynamite {
         return 6;
     }
 
+    // research: Dynamite.ProbeWatchSoldier(gameObjectId, seconds)
+    int l_ProbeWatchSoldier(lua_State *L) {
+        const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        const auto seconds = static_cast<int>(luaL_checkinteger(L, 2));
+        lua_pushboolean(L, Probe::WatchSoldierPosition(objectID, seconds));
+        return 1;
+    }
+
+    // research: Dynamite.ProbeWriteSoldier(gameObjectId, x, y, z)
+    int l_ProbeWriteSoldier(lua_State *L) {
+        const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        Probe::TestWriteSoldierPosition(objectID,
+            static_cast<float>(luaL_checknumber(L, 2)),
+            static_cast<float>(luaL_checknumber(L, 3)),
+            static_cast<float>(luaL_checknumber(L, 4)));
+        return 0;
+    }
+
     // int l_GetCamoRate(lua_State *L) {
     //     // wrong!
     //     // auto lvar8 = *(uint32_t *)((char *)camouflageControllerImpl + 0x38);
@@ -471,6 +490,8 @@ namespace Dynamite {
             {"GetEquipIDInSlot", l_GetEquipIDInSlot},
             {"SendBodyPosition", l_SendBodyPosition},
             {"PopBodyUpdate", l_PopBodyUpdate},
+            {"ProbeWatchSoldier", l_ProbeWatchSoldier},
+            {"ProbeWriteSoldier", l_ProbeWriteSoldier},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);

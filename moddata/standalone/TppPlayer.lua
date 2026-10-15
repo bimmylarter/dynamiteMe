@@ -2613,6 +2613,11 @@ local function dynApplyRemote(gameObjectId, x, y, z, rotY, dropped)
 		Dynamite.Log("body sync: warp failed for " .. tostring(gameObjectId) .. ": " .. tostring(err))
 	elseif dropped then
 		Dynamite.Log(string.format("body sync: placed %d at %.2f %.2f %.2f", gameObjectId, x, y, z))
+		-- research build: soldiers ignore Warp, test writing the position table directly
+		if Dynamite.ProbeWriteSoldier ~= nil
+			and GameObject.GetTypeIndex(gameObjectId) == TppGameObject.GAME_OBJECT_TYPE_SOLDIER2 then
+			Dynamite.ProbeWriteSoldier(gameObjectId, x, y, z)
+		end
 	end
 end
 
@@ -2652,6 +2657,11 @@ local function dynUpdate()
 	if dynBody.pendingId ~= nil then
 		if dynIsCarried(dynBody.pendingId) then
 			Dynamite.Log("body sync: carrying " .. tostring(dynBody.pendingId))
+			-- research build: record which game code moves the carried soldier
+			if Dynamite.ProbeWatchSoldier ~= nil
+				and GameObject.GetTypeIndex(dynBody.pendingId) == TppGameObject.GAME_OBJECT_TYPE_SOLDIER2 then
+				Dynamite.ProbeWatchSoldier(dynBody.pendingId, 5)
+			end
 			if dynBody.carriedId ~= nil and dynBody.carriedId ~= dynBody.pendingId then
 				dynSend(dynBody.carriedId, true)
 			end
