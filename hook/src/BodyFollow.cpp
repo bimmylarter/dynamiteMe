@@ -17,9 +17,9 @@ namespace Dynamite::BodyFollow {
         constexpr double timeout = 1.0;  // stop following if partner sends nothing for this long
         constexpr float easeRate = 20.0f; // fraction of remaining distance covered per second (scaled by dt)
         constexpr float snapDistance = 6.0f; // jump straight to target if further away than this
-        // The carrier's game reports a carried body at the height it was picked up from, so the body is held
-        // above the partner's character instead: carrier position (feet) + shoulder height.
-        constexpr float shoulderHeight = 1.25f;
+        // The carrier's game reports a carried body at the height it was picked up from, so the body follows the
+        // partner's character instead. A ragdolled soldier held higher sinks back and contorts, so it stays at the feet.
+        constexpr float shoulderHeight = 0.15f;
         constexpr float maxCarrierDistance = 4.0f; // use carrier position only if body update agrees with it
 
         uint32_t followID = noBody;
