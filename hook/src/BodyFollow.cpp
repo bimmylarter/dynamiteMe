@@ -1,6 +1,9 @@
 #include "BodyFollow.h"
 
 #include "SoldierWarp.h"
+#include "DynamiteCore.h"
+#include "DynamiteHook.h"
+#include "dynamite.h"
 #include "spdlog/spdlog.h"
 #include "windows.h"
 
@@ -12,8 +15,12 @@ namespace Dynamite::BodyFollow {
         constexpr uint32_t firstSoldier = 1024;
         constexpr uint32_t soldierCount = 512;
         constexpr double timeout = 1.0;  // stop following if partner sends nothing for this long
-        constexpr float easeRate = 12.0f; // fraction of remaining distance covered per second (scaled by dt)
+        constexpr float easeRate = 20.0f; // fraction of remaining distance covered per second (scaled by dt)
         constexpr float snapDistance = 6.0f; // jump straight to target if further away than this
+        // The carrier's game reports a carried body at the height it was picked up from, so the body is held
+        // above the partner's character instead: carrier position (feet) + shoulder height.
+        constexpr float shoulderHeight = 1.25f;
+        constexpr float maxCarrierDistance = 4.0f; // use carrier position only if body update agrees with it
 
         uint32_t followID = noBody;
         bool havePos = false;
@@ -79,18 +86,30 @@ namespace Dynamite::BodyFollow {
             return; // already moved this frame
         }
 
+        // partner's character, as seen here (updated every frame, smoother than 5 body updates a second)
+        float aim[3] = {target[0], target[1], target[2]};
+        auto carrier = DynamiteCore::GetPlayerPosition(g_hook->cfg.Host ? 1 : 0);
+        if (carrier.Valid()) {
+            const auto dx = carrier.x - target[0], dz = carrier.z - target[2];
+            if (dx * dx + dz * dz < maxCarrierDistance * maxCarrierDistance) {
+                aim[0] = carrier.x;
+                aim[1] = carrier.y + shoulderHeight;
+                aim[2] = carrier.z;
+            }
+        }
+
         float dist2 = 0;
         for (int i = 0; i < 3; i++) {
-            const auto d = target[i] - cur[i];
+            const auto d = aim[i] - cur[i];
             dist2 += d * d;
         }
         if (!havePos || dist2 > snapDistance * snapDistance) {
-            std::copy(std::begin(target), std::end(target), std::begin(cur));
+            std::copy(std::begin(aim), std::end(aim), std::begin(cur));
             havePos = true;
         } else {
             const auto k = std::min(1.0f, dt * easeRate);
             for (int i = 0; i < 3; i++) {
-                cur[i] += (target[i] - cur[i]) * k;
+                cur[i] += (aim[i] - cur[i]) * k;
             }
         }
 
