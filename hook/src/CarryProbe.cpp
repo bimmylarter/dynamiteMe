@@ -9,6 +9,7 @@
 #include "MinHook.h"
 
 #include <atomic>
+#include <initializer_list>
 #include <intrin.h>
 #include <cmath>
 #include <cstring>
@@ -392,6 +393,7 @@ namespace Dynamite::CarryProbe {
         }
 
         InstallMessageHook();
+        InstallCarryHooks();
         traceCount = 0;
         if (best != armedSoldier.load()) {
             messageCount = 0;
@@ -454,6 +456,127 @@ namespace Dynamite::CarryProbe {
         }
         traceCount = 0;
         DumpMessages(tag);
+    }
+
+    // --- carry attach experiment (1.0.15.4 only) ---
+    // Player carry component 0x14113bba0 (this, playerIndex, event): event 0 sends command 0x072bc35bcdbd to the
+    // target soldier through the game object manager (0x140bff050()->+0x60, vf 0x38 (this, int *result, id, cmd)):
+    //   +0x00 u64 hash, +0x08 u16 carrier player index, +0x0c u32 phase (0, then 2),
+    //   +0x10 carrier's per-player carry block (this+0x68, 0x6c0 bytes per player), +0x18 u16 0xffff, rest zero.
+    // Soldier side (0x1415541c0) pushes an action request whose first word is the carrier player index.
+    namespace {
+        constexpr uint64_t playerCarryEvent = 0x14113bba0;
+        constexpr uint64_t gameObjectSystemGetter = 0x140bff050;
+        constexpr uint64_t carryCommandHash = 0x072bc35bcdbdull;
+
+        std::atomic<uint64_t> carryComponent{0};
+        std::atomic<int> carryEventLogs{0};
+
+        using CarryEventFunc = uint64_t(__fastcall *)(void *self, uint32_t playerIndex, uint32_t event);
+        CarryEventFunc oCarryEvent = nullptr;
+
+        uint64_t __fastcall hkCarryEvent(void *self, const uint32_t playerIndex, const uint32_t event) {
+            carryComponent = reinterpret_cast<uint64_t>(self);
+            if (carryEventLogs.fetch_add(1) < 400) {
+                spdlog::info("[carryprobe] carry event player {} event {} component {}", playerIndex, event, self);
+            }
+            return oCarryEvent(self, playerIndex, event);
+        }
+
+        uint8_t *Exe(const uint64_t a) { return reinterpret_cast<uint8_t *>(a - 0x140000000 + exeBase); }
+
+        bool CheckBytes(const uint64_t a, std::initializer_list<uint8_t> bytes) {
+            auto p = Exe(a);
+            for (const auto b : bytes) {
+                if (*p++ != b) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    void InstallCarryHooks() {
+        static bool done = false;
+        if (done) {
+            return;
+        }
+        done = true;
+        if (!CheckBytes(playerCarryEvent, {0x48, 0x89, 0x5c, 0x24, 0x18, 0x55, 0x56, 0x57}) ||
+            !CheckBytes(gameObjectSystemGetter, {0x48, 0x83, 0xec, 0x28, 0xe8})) {
+            spdlog::info("[carryprobe] carry functions not found (game version?), carry attach disabled");
+            return;
+        }
+        const auto target = Exe(playerCarryEvent);
+        if (MH_CreateHook(target, reinterpret_cast<void *>(&hkCarryEvent), reinterpret_cast<void **>(&oCarryEvent)) != MH_OK ||
+            MH_EnableHook(target) != MH_OK) {
+            spdlog::info("[carryprobe] cannot hook carry event");
+            return;
+        }
+        spdlog::info("[carryprobe] carry event hooked");
+    }
+
+    int Attach(const uint32_t soldierID, const int playerIndexArg) {
+        InstallCarryHooks();
+        const auto comp = reinterpret_cast<char *>(carryComponent.load());
+        if (comp == nullptr) {
+            spdlog::info("[carryprobe] attach {}: carry component unknown yet (pick up any body once yourself first)", soldierID);
+            return 0;
+        }
+        const uint32_t playerIndex = playerIndexArg >= 0 ? playerIndexArg : (g_hook->cfg.Host ? 1 : 0);
+
+        const auto info = *(char **)(comp + 0x38);
+        const auto blocks = *(char **)(comp + 0x68);
+        if (!Readable(info, 0x28) || blocks == nullptr) {
+            spdlog::info("[carryprobe] attach {}: bad carry component", soldierID);
+            return -1;
+        }
+        const auto base = *(uint32_t *)(info + 0x24);
+        if (playerIndex < base || playerIndex - base > 7) {
+            spdlog::info("[carryprobe] attach {}: player {} outside carry blocks (base {})", soldierID, playerIndex, base);
+            return -1;
+        }
+        const auto block = blocks + (playerIndex - base) * 0x6c0;
+        if (!Readable(block, 0x6c0)) {
+            spdlog::info("[carryprobe] attach {}: carry block not readable", soldierID);
+            return -1;
+        }
+        spdlog::info("[carryprobe] attach {}: player {} block {} target {:#x} idx {} flag85 {} state384 {}",
+            soldierID, playerIndex, (void *)block, *(uint16_t *)(block + 0x78), *(uint8_t *)(block + 0x80), *(uint8_t *)(block + 0x85), *(uint8_t *)(block + 0x384));
+
+        using GetterFunc = char *(__fastcall *)();
+        using SendFunc = int *(__fastcall *)(void *mgr, int *result, uint32_t id, void *cmd);
+        const auto sys = reinterpret_cast<GetterFunc>(Exe(gameObjectSystemGetter))();
+        const auto mgr = sys ? *(void **)(sys + 0x60) : nullptr;
+        if (mgr == nullptr) {
+            spdlog::info("[carryprobe] attach {}: no game object manager", soldierID);
+            return -1;
+        }
+        const auto send = reinterpret_cast<SendFunc>((*(void ***)mgr)[0x38 / 8]);
+
+        // carrier block fields the game sets before sending
+        *(uint16_t *)(block + 0x78) = static_cast<uint16_t>(soldierID);
+        *(uint8_t *)(block + 0x80) = static_cast<uint8_t>(playerIndex);
+        *(uint8_t *)(block + 0x85) = 0; // remote player
+
+        alignas(16) uint8_t cmd[0x60] = {};
+        *(uint64_t *)(cmd + 0x00) = carryCommandHash;
+        *(uint16_t *)(cmd + 0x08) = static_cast<uint16_t>(playerIndex & 0x1ff);
+        *(uint32_t *)(cmd + 0x0c) = 0;
+        *(void **)(cmd + 0x10) = block;
+        *(uint16_t *)(cmd + 0x18) = 0xffff;
+
+        int result = -1;
+        send(mgr, &result, soldierID, cmd);
+        spdlog::info("[carryprobe] attach {}: phase 0 result {:#x} out29 {} out28 {:#x}", soldierID, (uint32_t)result, cmd[0x29], *(uint16_t *)(cmd + 0x28));
+        if (result < 0) {
+            return -1;
+        }
+        *(uint32_t *)(cmd + 0x0c) = 2;
+        result = -1;
+        send(mgr, &result, soldierID, cmd);
+        spdlog::info("[carryprobe] attach {}: phase 2 result {:#x}", soldierID, (uint32_t)result);
+        return 1;
     }
 
     void Disarm() {

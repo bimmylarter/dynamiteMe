@@ -1,6 +1,8 @@
 #include "DynamiteLua.h"
 #include "SoldierWarp.h"
 #include "CarryProbe.h"
+#include <map>
+#include <set>
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "lua/lauxlib.h"
@@ -417,9 +419,29 @@ namespace Dynamite {
     // returns nothing (id == nil) when queue is empty
     // called from TppPlayer.Update on game thread
     int l_PopBodyUpdate(lua_State *L) {
+        CarryProbe::InstallCarryHooks();
         const auto u = g_hook->dynamiteSyncImpl.PopBodyUpdate();
         if (!u.has_value()) {
             return 0;
+        }
+
+        // research: partner carries this body, try to make it carried by partner's player here too
+        {
+            static std::set<uint32_t> attached;
+            static std::map<uint32_t, uint32_t> nextTry;
+            if (u->dropped) {
+                if (attached.erase(u->objectID) > 0) {
+                    spdlog::info("[carryprobe] partner dropped attached body {}", u->objectID);
+                }
+                nextTry.erase(u->objectID);
+            } else if (u->objectID >= 1024 && !attached.contains(u->objectID) && GetTickCount() >= nextTry[u->objectID]) {
+                const auto res = CarryProbe::Attach(u->objectID, -1);
+                if (res != 0) {
+                    attached.insert(u->objectID);
+                } else {
+                    nextTry[u->objectID] = GetTickCount() + 1000;
+                }
+            }
         }
 
         lua_pushinteger(L, u->objectID);
@@ -463,6 +485,14 @@ namespace Dynamite {
         const auto tag = luaL_checklstring(L, 1, &len);
         CarryProbe::Dump(tag);
         return 0;
+    }
+
+    // research: Dynamite.CarryAttach(soldierID, playerIndex or -1 for remote) -> 1 sent, 0 not ready, -1 failed
+    int l_CarryAttach(lua_State *L) {
+        const auto id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        const auto idx = static_cast<int>(luaL_checkinteger(L, 2)); // -1 = remote player
+        lua_pushinteger(L, CarryProbe::Attach(id, idx));
+        return 1;
     }
 
     // int l_GetCamoRate(lua_State *L) {
@@ -510,6 +540,7 @@ namespace Dynamite {
             {"WarpSoldier", l_WarpSoldier},
             {"CarryProbeArm", l_CarryProbeArm},
             {"CarryProbeDump", l_CarryProbeDump},
+            {"CarryAttach", l_CarryAttach},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);

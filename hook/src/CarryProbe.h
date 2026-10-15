@@ -1,6 +1,7 @@
 #ifndef HOOK_CARRYPROBE_H
 #define HOOK_CARRYPROBE_H
 
+#include <cstdint>
 #include <string>
 
 // Research build: find which game code puts a soldier into / out of "carried" state.
@@ -13,6 +14,12 @@ namespace Dynamite::CarryProbe {
 
     // write collected traces to log with a tag, clear them, keep watching
     void Dump(const std::string &tag);
+
+    // install carry event hook (learns the player carry component)
+    void InstallCarryHooks();
+
+    // experiment: make soldier carried by player (default: remote player). 1 sent, 0 not ready, -1 failed
+    int Attach(uint32_t soldierID, int playerIndex = -1);
 
     // stop watching
     void Disarm();
