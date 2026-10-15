@@ -1,5 +1,7 @@
 dynamite
 ===
+***** this is a claude made edit from the original mod that works on the newest version, and is attempting to add body carrying sync
+
 
 dynamite is a 2 player co-op mod for Metal Gear Solid V: The Phantom Pain in early development stage.
 
