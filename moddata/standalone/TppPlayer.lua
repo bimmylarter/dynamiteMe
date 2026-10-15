@@ -2535,6 +2535,7 @@ local dynBody = {
 	settleId = nil,
 	settleTime = 0,
 	remoteMoved = {},
+	soldierWarps = {},
 	enabled = false,
 }
 e.dynBody = dynBody
@@ -2566,6 +2567,7 @@ local function dynReset()
 	dynBody.pendingId = nil
 	dynBody.settleId = nil
 	dynBody.remoteMoved = {}
+	dynBody.soldierWarps = {}
 end
 
 -- returns x, y, z, rotY (degrees) of the body, nil if position is unavailable
@@ -2613,10 +2615,11 @@ local function dynApplyRemote(gameObjectId, x, y, z, rotY, dropped)
 		Dynamite.Log("body sync: warp failed for " .. tostring(gameObjectId) .. ": " .. tostring(err))
 	elseif dropped then
 		Dynamite.Log(string.format("body sync: placed %d at %.2f %.2f %.2f", gameObjectId, x, y, z))
-		-- research build: soldiers ignore Warp, test writing the position table directly
-		if Dynamite.ProbeWriteSoldier ~= nil
+		-- soldiers ignore the Warp command, move them through the hook (research build)
+		if Dynamite.ProbeWarpSoldier ~= nil
 			and GameObject.GetTypeIndex(gameObjectId) == TppGameObject.GAME_OBJECT_TYPE_SOLDIER2 then
-			Dynamite.ProbeWriteSoldier(gameObjectId, x, y, z)
+			dynBody.soldierWarps[gameObjectId] = { x = x, y = y, z = z, expire = dynNow() + 2.0 }
+			Dynamite.ProbeCaptureSoldier(gameObjectId)
 		end
 	end
 end
@@ -2653,15 +2656,24 @@ local function dynUpdate()
 		dynApplyRemote(id, x, y, z, rotY, dropped)
 	end
 
+	-- pending soldier warps: wait until hook has captured soldier controller, then move
+	for id, w in pairs(dynBody.soldierWarps) do
+		local res = Dynamite.ProbeWarpSoldier(id, w.x, w.y, w.z)
+		if res ~= 0 then
+			Dynamite.Log("body sync: soldier warp " .. tostring(id) .. " result " .. tostring(res))
+			dynBody.soldierWarps[id] = nil
+		elseif now > w.expire then
+			Dynamite.Log("body sync: soldier warp " .. tostring(id) .. " timed out")
+			dynBody.soldierWarps[id] = nil
+		else
+			Dynamite.ProbeCaptureSoldier(id)
+		end
+	end
+
 	-- confirm local carry
 	if dynBody.pendingId ~= nil then
 		if dynIsCarried(dynBody.pendingId) then
 			Dynamite.Log("body sync: carrying " .. tostring(dynBody.pendingId))
-			-- research build: record which game code moves the carried soldier
-			if Dynamite.ProbeWatchSoldier ~= nil
-				and GameObject.GetTypeIndex(dynBody.pendingId) == TppGameObject.GAME_OBJECT_TYPE_SOLDIER2 then
-				Dynamite.ProbeWatchSoldier(dynBody.pendingId, 5)
-			end
 			if dynBody.carriedId ~= nil and dynBody.carriedId ~= dynBody.pendingId then
 				dynSend(dynBody.carriedId, true)
 			end

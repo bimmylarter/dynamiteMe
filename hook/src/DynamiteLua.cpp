@@ -449,6 +449,24 @@ namespace Dynamite {
         return 0;
     }
 
+    // research: Dynamite.ProbeCaptureSoldier(gameObjectId) -> true when controller is known
+    int l_ProbeCaptureSoldier(lua_State *L) {
+        const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        lua_pushboolean(L, Probe::CaptureSoldierController(objectID));
+        return 1;
+    }
+
+    // research: Dynamite.ProbeWarpSoldier(gameObjectId, x, y, z) -> 1 moved, 0 not captured yet, -1 failed
+    int l_ProbeWarpSoldier(lua_State *L) {
+        const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        const auto res = Probe::WarpSoldier(objectID,
+            static_cast<float>(luaL_checknumber(L, 2)),
+            static_cast<float>(luaL_checknumber(L, 3)),
+            static_cast<float>(luaL_checknumber(L, 4)));
+        lua_pushinteger(L, res);
+        return 1;
+    }
+
     // int l_GetCamoRate(lua_State *L) {
     //     // wrong!
     //     // auto lvar8 = *(uint32_t *)((char *)camouflageControllerImpl + 0x38);
@@ -492,6 +510,8 @@ namespace Dynamite {
             {"PopBodyUpdate", l_PopBodyUpdate},
             {"ProbeWatchSoldier", l_ProbeWatchSoldier},
             {"ProbeWriteSoldier", l_ProbeWriteSoldier},
+            {"ProbeCaptureSoldier", l_ProbeCaptureSoldier},
+            {"ProbeWarpSoldier", l_ProbeWarpSoldier},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);
