@@ -175,6 +175,15 @@ namespace Dynamite::BodyFollow {
         }
         std::copy(std::begin(placed), std::end(placed), std::begin(cur));
         havePos = true;
+        {
+            static double nextTrace = 0;
+            if (Now() >= nextTrace) {
+                nextTrace = Now() + 0.25;
+                auto carrier = DynamiteCore::GetPlayerPosition(g_hook->cfg.Host ? 1 : 0);
+                spdlog::info("BodyFollow, place trace {}: body {:.2f} {:.2f} {:.2f} rot {:.2f} {:.2f} {:.2f} {:.2f} partner {:.2f} {:.2f} {:.2f}", followID, placed[0], placed[1],
+                    placed[2], rot[0], rot[1], rot[2], rot[3], carrier.x, carrier.y, carrier.z);
+            }
+        }
         SoldierWarp::Warp(followID, placed[0], placed[1], placed[2], false, haveRot ? rot : nullptr);
     }
 

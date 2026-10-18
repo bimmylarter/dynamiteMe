@@ -176,7 +176,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v21, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v22, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -559,6 +559,13 @@ namespace Dynamite::PlayerProbe {
             float off[3], rel[4];
             QuatRotate(inv, d, off);
             QuatMul(inv, sr, rel);
+            static double nextTrace = 0;
+            if (now >= nextTrace) {
+                // v22: offset trace while carrying, to see whether the soldier's root follows the carrier
+                nextTrace = now + 0.25;
+                spdlog::info("[playerprobe] offset trace {}: off {:.2f} {:.2f} {:.2f} rel {:.2f} {:.2f} {:.2f} {:.2f} soldier {:.2f} {:.2f} {:.2f} carrier {:.2f} {:.2f} {:.2f}",
+                    target, off[0], off[1], off[2], rel[0], rel[1], rel[2], rel[3], sp[0], sp[1], sp[2], cp[0], cp[1], cp[2]);
+            }
             if (logged != target) {
                 logged = target;
                 spdlog::info("[playerprobe] carry offset {}: soldier pos {} {} {} rot {} {} {} {} | carrier pos {} {} {} rot {} {} {} {} | offset {} {} {} rel {} {} {} {}",
