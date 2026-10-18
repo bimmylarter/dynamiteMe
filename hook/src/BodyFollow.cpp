@@ -89,6 +89,9 @@ namespace Dynamite::BodyFollow {
         if (!SoldierWarp::Capture(followID)) {
             return; // character object not found yet, retried next frame
         }
+        if (attached) {
+            return; // placed every frame right after the players are updated, see PlaceAttached
+        }
         if (dt <= 0.0f && havePos) {
             return; // already moved this frame
         }
@@ -141,6 +144,28 @@ namespace Dynamite::BodyFollow {
     uint32_t FollowedID() { return followID; }
 
     double FollowedFor() { return followID == noBody ? 0.0 : Now() - followStart; }
+
+    void PlaceAttached() {
+        if (followID == noBody || !attached) {
+            return;
+        }
+        alignas(16) float rot[4];
+        float placed[3];
+        bool haveRot = PlayerProbe::CarriedPlacement(followID, placed, rot);
+        if (!haveRot) {
+            auto carrier = DynamiteCore::GetPlayerPosition(g_hook->cfg.Host ? 1 : 0);
+            if (!carrier.Valid()) {
+                return;
+            }
+            placed[0] = carrier.x;
+            placed[1] = carrier.y;
+            placed[2] = carrier.z;
+            haveRot = PlayerProbe::PartnerRotation(rot);
+        }
+        std::copy(std::begin(placed), std::end(placed), std::begin(cur));
+        havePos = true;
+        SoldierWarp::Warp(followID, placed[0], placed[1], placed[2], false, haveRot ? rot : nullptr);
+    }
 
     void SetAttached(const bool a) {
         if (followID == noBody) {

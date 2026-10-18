@@ -173,7 +173,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v18, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v19, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -189,7 +189,10 @@ namespace Dynamite::PlayerProbe {
 
         void *__fastcall hkInfoUpdate(void *self, void *a2, void *a3, void *a4) {
             infoUpdater = reinterpret_cast<uint64_t>(self);
-            return oInfoUpdate(self, a2, a3, a4);
+            const auto res = oInfoUpdate(self, a2, a3, a4);
+            // player info was just refreshed for this frame: move the carried body with the partner now, not a frame later
+            BodyFollow::PlaceAttached();
+            return res;
         }
 
         void InstallInfoHook() {
@@ -304,6 +307,16 @@ namespace Dynamite::PlayerProbe {
         std::atomic<uint32_t> carriedIndex{0xffffffff};
         std::atomic<uint32_t> carriedID{0xffff};
         std::atomic<uint64_t> forwardUntil{0}; // GetTickCount64: keep forwarding soldier requests a while after the drop
+        // recent soldier requests (carrier side), so the start of a pickup can be sent once the soldier is identified
+        struct RecentMotion {
+            uint64_t tick;
+            uint64_t ctrl;
+            uint32_t index;
+            CarryMotionUpdate m;
+        };
+        constexpr size_t maxRecent = 96;
+        std::vector<RecentMotion> recent;
+        uint64_t carryStartTick = 0;
 
         // watcher side: soldier motion ctrl by soldier local index, learned from soldier motion requests
         constexpr int maxSoldierSlots = 64;
@@ -318,17 +331,24 @@ namespace Dynamite::PlayerProbe {
                 if (ctrl == motionCtrl[local] && player == static_cast<uint32_t>(local) && ret >= carryCodeStart && ret < carryCodeEnd) {
                     std::lock_guard lock(outMutex);
                     outgoing.push_back({.body = false, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags});
+                } else if (reinterpret_cast<uint64_t>(ctrl) == carriedCtrl.load() && player == carriedIndex.load() &&
+                           (localCarryTarget.load() != 0xffff || GetTickCount64() < forwardUntil.load())) {
+                    // everything the carried soldier plays while picked up, carried and put down
+                    std::lock_guard lock(outMutex);
+                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
                 } else if (ret >= carriedAiStart && ret < carriedAiEnd && localCarryTarget.load() != 0xffff) {
                     carriedCtrl = reinterpret_cast<uint64_t>(ctrl);
                     carriedIndex = player;
                     carriedID = localCarryTarget.load();
                     std::lock_guard lock(outMutex);
                     outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
-                } else if (reinterpret_cast<uint64_t>(ctrl) == carriedCtrl.load() && player == carriedIndex.load() &&
-                           (localCarryTarget.load() != 0xffff || GetTickCount64() < forwardUntil.load())) {
-                    // everything else the carried soldier plays while carried and while being put down
+                } else if (ctrl != motionCtrl[0] && ctrl != motionCtrl[1]) {
                     std::lock_guard lock(outMutex);
-                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
+                    if (recent.size() >= maxRecent) {
+                        recent.erase(recent.begin());
+                    }
+                    recent.push_back({GetTickCount64(), reinterpret_cast<uint64_t>(ctrl), player,
+                        {.body = true, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags}});
                 }
                 if (ctrl != motionCtrl[0] && ctrl != motionCtrl[1] && player < maxSoldierSlots) {
                     soldierCtrlByIndex[player] = reinterpret_cast<uint64_t>(ctrl);
@@ -458,12 +478,12 @@ namespace Dynamite::PlayerProbe {
                 return;
             }
             uint32_t index = 0;
-            if (!SoldierWarp::LocalIndex(m.objectID, index) || index >= maxSoldierSlots) {
+            if (!SoldierWarp::LocalIndex(m.objectID, index)) {
                 SoldierWarp::Capture(m.objectID);
                 spdlog::info("[playerprobe] replay: soldier {} local index unknown yet, state {:012x} skipped", m.objectID, m.state);
                 return;
             }
-            const auto ctrl = reinterpret_cast<void *>(soldierCtrlByIndex[index].load());
+            const auto ctrl = reinterpret_cast<void *>(SoldierWarp::Controller(m.objectID));
             spdlog::info("[playerprobe] replay: soldier {} (index {}, ctrl {}) layer {} state {:012x} blend {} flags {:#x}", m.objectID, index, ctrl, m.layer, m.state,
                 m.blend, m.flags);
             if (ctrl) {
@@ -583,7 +603,36 @@ namespace Dynamite::PlayerProbe {
             if (target == 0xffff && localCarryTarget.load() != 0xffff) {
                 forwardUntil = GetTickCount64() + 4000;
             }
+            if (target != 0xffff && target != localCarryTarget.load()) {
+                carryStartTick = GetTickCount64();
+                carriedCtrl = 0;
+                carriedIndex = 0xffffffff;
+            }
             localCarryTarget = target;
+            // identify the soldier's motion ctrl as soon as its local index is known, send what it played since the pickup began
+            uint32_t index = 0;
+            if (target != 0xffff && carriedCtrl.load() == 0) {
+                // the soldier controller found by SoldierWarp is also the soldier's motion controller
+                if (SoldierWarp::LocalIndex(target, index) && SoldierWarp::Controller(target) != 0) {
+                    std::lock_guard lock(outMutex);
+                    carriedID = target;
+                    carriedIndex = index;
+                    carriedCtrl = SoldierWarp::Controller(target);
+                    int sent = 0;
+                    for (const auto &r : recent) {
+                        if (r.ctrl == carriedCtrl.load() && r.index == index && r.tick + 300 >= carryStartTick) {
+                            auto m = r.m;
+                            m.objectID = target;
+                            outgoing.push_back(m);
+                            sent++;
+                        }
+                    }
+                    recent.clear();
+                    spdlog::info("[playerprobe] carrying soldier {} (index {}, ctrl {:#x}), {} earlier requests sent", target, index, carriedCtrl.load(), sent);
+                } else {
+                    SoldierWarp::Capture(target);
+                }
+            }
             SendCarryOffset(local, now);
         }
         {

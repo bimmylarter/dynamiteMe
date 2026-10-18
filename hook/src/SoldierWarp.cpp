@@ -6,6 +6,8 @@
 #include "windows.h"
 
 #include <atomic>
+#include <map>
+#include <mutex>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -25,6 +27,16 @@ namespace Dynamite::SoldierWarp {
         std::atomic<uint32_t> capturedLocalIndex{0};
 
         PVOID vehHandle = nullptr;
+
+        // captured soldiers: controller and local index per soldier, with the position table they were captured from
+        // (a new mission or a re-created soldier gives a different table, which invalidates the entry)
+        struct Known {
+            uint64_t controller;
+            uint32_t localIndex;
+            uint64_t table;
+        };
+        std::mutex knownMutex;
+        std::map<uint32_t, Known> known;
 
         constexpr uint64_t dr7Mask = 0xF0003ull;                                // L0/G0 + RW0/LEN0
         constexpr uint64_t dr7Write4 = 1ull | (1ull << 16) | (3ull << 18); // L0, write, 4 bytes
@@ -122,8 +134,12 @@ namespace Dynamite::SoldierWarp {
         }
     }
 
+    bool Lookup(const uint32_t objectID, uint64_t &controller, uint32_t &localIndex);
+
     bool Capture(const uint32_t objectID) {
-        if (capturedObjectID.load() == objectID && capturedController.load() != 0) {
+        uint64_t c;
+        uint32_t i;
+        if (Lookup(objectID, c, i)) {
             return true;
         }
 
@@ -161,6 +177,10 @@ namespace Dynamite::SoldierWarp {
             capturing = false;
 
             if (capturedObjectID.load() == objectID) {
+                {
+                    std::lock_guard lock(knownMutex);
+                    known[objectID] = {capturedController.load(), capturedLocalIndex.load(), reinterpret_cast<uint64_t>(entry) - 0x10 * (objectID - 1024)};
+                }
                 spdlog::info("SoldierWarp::Capture, soldier {} controller {:#x} local index {}", objectID, capturedController.load(), capturedLocalIndex.load());
             } else {
                 spdlog::info("SoldierWarp::Capture, soldier {} was not updated within 500 ms", objectID);
@@ -171,7 +191,9 @@ namespace Dynamite::SoldierWarp {
     }
 
     int Warp(const uint32_t objectID, const float x, const float y, const float z, const bool log, const float *rotation) {
-        if (capturedObjectID.load() != objectID || capturedController.load() == 0) {
+        uint64_t controller;
+        uint32_t localIndex;
+        if (!Lookup(objectID, controller, localIndex)) {
             return 0;
         }
 
@@ -180,21 +202,24 @@ namespace Dynamite::SoldierWarp {
         using SetRotFunc = void(__fastcall *)(void *obj, void *rot);
         using SetTransformFunc = void(__fastcall *)(void *obj, void *pos, void *rot);
 
-        const auto ctrl = reinterpret_cast<void *>(capturedController.load());
+        const auto ctrl = reinterpret_cast<void *>(controller);
         const auto ctrlVtable = *reinterpret_cast<void ***>(ctrl);
-        const auto obj = reinterpret_cast<GetCharaFunc>(ctrlVtable[0x388 / 8])(ctrl, capturedLocalIndex.load());
+        const auto obj = reinterpret_cast<GetCharaFunc>(ctrlVtable[0x388 / 8])(ctrl, localIndex);
         const auto entry = PositionEntry(objectID);
         if (obj == nullptr || entry == nullptr) {
             spdlog::info("{}, soldier {} has no character object", __PRETTY_FUNCTION__, objectID);
-            capturedObjectID = noSoldier;
+            std::lock_guard lock(knownMutex);
+            known.erase(objectID);
             return -1;
         }
 
-        // character object must belong to this soldier: its position is the source of the position table entry
+        // character object must belong to this soldier: near its position table entry (the entry is not updated
+        // while the soldier is carried or moved by us, so only a loose check is possible)
         const auto objPos = reinterpret_cast<float *>((char *)obj + 0x20);
-        if (std::abs(objPos[0] - entry[0]) > 1.0f || std::abs(objPos[2] - entry[2]) > 1.0f) {
+        if (std::abs(objPos[0] - entry[0]) > 30.0f || std::abs(objPos[2] - entry[2]) > 30.0f) {
             spdlog::info("{}, soldier {} character object does not match, recapture needed", __PRETTY_FUNCTION__, objectID);
-            capturedObjectID = noSoldier;
+            std::lock_guard lock(knownMutex);
+            known.erase(objectID);
             return -1;
         }
 
@@ -218,21 +243,42 @@ namespace Dynamite::SoldierWarp {
     }
 
     bool LocalIndex(const uint32_t objectID, uint32_t &index) {
-        if (capturedObjectID.load() != objectID || capturedController.load() == 0) {
+        uint64_t controller;
+        return Lookup(objectID, controller, index);
+    }
+
+    uint64_t Controller(const uint32_t objectID) {
+        uint64_t controller;
+        uint32_t index;
+        return Lookup(objectID, controller, index) ? controller : 0;
+    }
+
+    bool Lookup(const uint32_t objectID, uint64_t &controller, uint32_t &localIndex) {
+        const auto entry = PositionEntry(objectID);
+        std::lock_guard lock(knownMutex);
+        const auto it = known.find(objectID);
+        if (it == known.end()) {
             return false;
         }
-        index = capturedLocalIndex.load();
+        if (entry == nullptr || reinterpret_cast<uint64_t>(entry) - 0x10 * (objectID - 1024) != it->second.table) {
+            known.erase(it); // different mission / soldier re-created
+            return false;
+        }
+        controller = it->second.controller;
+        localIndex = it->second.localIndex;
         return true;
     }
 
     bool GetTransform(const uint32_t objectID, float pos[3], float rot[4]) {
-        if (capturedObjectID.load() != objectID || capturedController.load() == 0) {
+        uint64_t controller;
+        uint32_t localIndex;
+        if (!Lookup(objectID, controller, localIndex)) {
             return false;
         }
         using GetCharaFunc = void *(__fastcall *)(void *ctrl, uint32_t localIndex);
         using GetRotFunc = void *(__fastcall *)(void *obj);
-        const auto ctrl = reinterpret_cast<void *>(capturedController.load());
-        const auto obj = reinterpret_cast<GetCharaFunc>((*reinterpret_cast<void ***>(ctrl))[0x388 / 8])(ctrl, capturedLocalIndex.load());
+        const auto ctrl = reinterpret_cast<void *>(controller);
+        const auto obj = reinterpret_cast<GetCharaFunc>((*reinterpret_cast<void ***>(ctrl))[0x388 / 8])(ctrl, localIndex);
         if (obj == nullptr) {
             return false;
         }

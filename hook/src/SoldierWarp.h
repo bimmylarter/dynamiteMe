@@ -27,6 +27,9 @@ namespace Dynamite::SoldierWarp {
 
     // local index of a captured soldier (true if known)
     bool LocalIndex(uint32_t objectID, uint32_t &index);
+
+    // soldier controller of a captured soldier (also its motion controller), 0 if unknown
+    uint64_t Controller(uint32_t objectID);
 }
 
 #endif // HOOK_SOLDIERWARP_H

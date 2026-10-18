@@ -22,6 +22,9 @@ namespace Dynamite::BodyFollow {
     // body plays the carried animation: place it exactly at the carrier, facing the carrier's direction
     void SetAttached(bool attached);
 
+    // place an attached body at the carrier, call right after players are updated (every frame)
+    void PlaceAttached();
+
     // forget followed body (session end)
     void Reset();
 }
