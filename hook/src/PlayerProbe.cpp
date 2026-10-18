@@ -1,6 +1,8 @@
 #include "PlayerProbe.h"
 
 #include "BodyFollow.h"
+#include "DynamiteCore.h"
+#include "mgsvtpp_func_typedefs.h"
 #include "CarryProbe.h"
 #include "SoldierWarp.h"
 #include "DynamiteSyncImpl/DynamiteSyncImpl.h"
@@ -176,7 +178,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v22, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v23, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -481,6 +483,38 @@ namespace Dynamite::PlayerProbe {
             replaying = false;
         }
 
+        struct PendingBody {
+            uint64_t tick;
+            CarryMotionUpdate m;
+        };
+        std::vector<PendingBody> pendingBody;
+
+        void ApplyCarryMotion(const int remote, const CarryMotionUpdate &m);
+
+        // replay queued soldier requests once the soldier is captured (in order), drop them after 1.5 s
+        void FlushPendingBody(const int remote) {
+            if (pendingBody.empty()) {
+                return;
+            }
+            const auto now = GetTickCount64();
+            std::vector<PendingBody> keep;
+            std::vector<CarryMotionUpdate> ready;
+            for (const auto &p : pendingBody) {
+                uint32_t index;
+                if (SoldierWarp::LocalIndex(p.m.objectID, index)) {
+                    ready.push_back(p.m);
+                } else if (now - p.tick < 1500) {
+                    keep.push_back(p);
+                } else {
+                    spdlog::info("[playerprobe] replay: soldier {} never captured, state {:012x} dropped", p.m.objectID, p.m.state);
+                }
+            }
+            pendingBody.swap(keep);
+            for (const auto &m : ready) {
+                ApplyCarryMotion(remote, m);
+            }
+        }
+
         void ApplyCarryMotion(const int remote, const CarryMotionUpdate &m) {
             if (!m.body) {
                 const auto ctrl = motionCtrl[remote];
@@ -496,8 +530,12 @@ namespace Dynamite::PlayerProbe {
             }
             uint32_t index = 0;
             if (!SoldierWarp::LocalIndex(m.objectID, index)) {
+                // soldier not captured here yet (usually the first request of a pickup): keep it, replay once captured
                 SoldierWarp::Capture(m.objectID);
-                spdlog::info("[playerprobe] replay: soldier {} local index unknown yet, state {:012x} skipped", m.objectID, m.state);
+                if (pendingBody.size() < 32) {
+                    pendingBody.push_back({GetTickCount64(), m});
+                }
+                spdlog::info("[playerprobe] replay: soldier {} not captured yet, state {:012x} queued", m.objectID, m.state);
                 return;
             }
             const auto ctrl = reinterpret_cast<void *>(SoldierWarp::Controller(m.objectID));
@@ -762,8 +800,49 @@ namespace Dynamite::PlayerProbe {
             }
         }
         // watcher side: replay partner's carry animation requests
+        // capture downed soldiers near either player ahead of time, so a pickup's first animation is not delayed
+        {
+            static double nextPre = 0;
+            if (now >= nextPre) {
+                nextPre = now + 0.5;
+                const Vector3 players[2] = {DynamiteCore::GetPlayerPosition(0), DynamiteCore::GetPlayerPosition(1)};
+                for (uint32_t id = 1024; id < 1024 + 512; id++) {
+                    if (FindGameObjectWithID(id) == nullptr) {
+                        continue;
+                    }
+                    const auto life = DynamiteCore::GetSoldierLifeStatus(id);
+                    if (life != ENPCLifeState::SLEEP && life != ENPCLifeState::FAINT && life != ENPCLifeState::DYING && life != ENPCLifeState::DEAD) {
+                        continue;
+                    }
+                    uint32_t index;
+                    if (SoldierWarp::LocalIndex(id, index)) {
+                        continue;
+                    }
+                    const auto pos = DynamiteCore::GetSoldierPosition(id);
+                    bool isNear = false;
+                    for (const auto &pl : players) {
+                        const auto dx = pos.x - pl.x, dz = pos.z - pl.z;
+                        isNear |= dx * dx + dz * dz < 6.0f * 6.0f;
+                    }
+                    if (isNear) {
+                        SoldierWarp::Capture(id); // one capture at a time, the next one on a later tick
+                        break;
+                    }
+                }
+            }
+        }
+        FlushPendingBody(remote);
         while (const auto m = g_hook->dynamiteSyncImpl.PopCarryMotion()) {
-            ApplyCarryMotion(remote, *m);
+            // keep order: while earlier requests for this soldier wait for the capture, queue later ones behind them
+            bool queued = false;
+            for (const auto &p : pendingBody) {
+                queued |= m->body && p.m.objectID == m->objectID;
+            }
+            if (queued) {
+                pendingBody.push_back({GetTickCount64(), *m});
+            } else {
+                ApplyCarryMotion(remote, *m);
+            }
         }
 
         // log every motion call for a few seconds after a carry starts (local or partner)
