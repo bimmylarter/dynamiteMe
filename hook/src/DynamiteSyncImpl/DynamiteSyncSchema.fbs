@@ -15,7 +15,8 @@ union Message {
    SendBossQuietSetActionTask,
    SendBossQuietDamage,
    BodyPosition,
-   CarryMotion
+   CarryMotion,
+   CarryOffset
 }
 
 table MessageWrapper {
@@ -187,4 +188,14 @@ table CarryMotion {
     state: uint64;      // motion state hash
     blend: float32;
     flags: int32;
+}
+
+// Where the carried soldier is relative to the carrier (carrier local frame), sent while carrying.
+table CarryOffset {
+    object_id: uint32;
+    offset: Vec3;
+    rot_x: float32;  // soldier rotation relative to carrier rotation, quaternion
+    rot_y: float32;
+    rot_z: float32;
+    rot_w: float32;
 }

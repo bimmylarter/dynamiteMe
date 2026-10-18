@@ -224,4 +224,20 @@ namespace Dynamite::SoldierWarp {
         index = capturedLocalIndex.load();
         return true;
     }
+
+    bool GetTransform(const uint32_t objectID, float pos[3], float rot[4]) {
+        if (capturedObjectID.load() != objectID || capturedController.load() == 0) {
+            return false;
+        }
+        using GetCharaFunc = void *(__fastcall *)(void *ctrl, uint32_t localIndex);
+        using GetRotFunc = void *(__fastcall *)(void *obj);
+        const auto ctrl = reinterpret_cast<void *>(capturedController.load());
+        const auto obj = reinterpret_cast<GetCharaFunc>((*reinterpret_cast<void ***>(ctrl))[0x388 / 8])(ctrl, capturedLocalIndex.load());
+        if (obj == nullptr) {
+            return false;
+        }
+        memcpy(pos, (char *)obj + 0x20, 3 * sizeof(float));
+        memcpy(rot, reinterpret_cast<GetRotFunc>((*reinterpret_cast<void ***>(obj))[0x78 / 8])(obj), 4 * sizeof(float));
+        return true;
+    }
 }

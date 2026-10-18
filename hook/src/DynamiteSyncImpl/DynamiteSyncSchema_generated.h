@@ -91,6 +91,9 @@ struct BodyPositionBuilder;
 struct CarryMotion;
 struct CarryMotionBuilder;
 
+struct CarryOffset;
+struct CarryOffsetBuilder;
+
 enum Message : uint8_t {
   Message_NONE = 0,
   Message_Ping = 1,
@@ -108,11 +111,12 @@ enum Message : uint8_t {
   Message_SendBossQuietDamage = 13,
   Message_BodyPosition = 14,
   Message_CarryMotion = 15,
+  Message_CarryOffset = 16,
   Message_MIN = Message_NONE,
-  Message_MAX = Message_CarryMotion
+  Message_MAX = Message_CarryOffset
 };
 
-inline const Message (&EnumValuesMessage())[16] {
+inline const Message (&EnumValuesMessage())[17] {
   static const Message values[] = {
     Message_NONE,
     Message_Ping,
@@ -129,13 +133,14 @@ inline const Message (&EnumValuesMessage())[16] {
     Message_SendBossQuietSetActionTask,
     Message_SendBossQuietDamage,
     Message_BodyPosition,
-    Message_CarryMotion
+    Message_CarryMotion,
+    Message_CarryOffset
   };
   return values;
 }
 
 inline const char * const *EnumNamesMessage() {
-  static const char * const names[17] = {
+  static const char * const names[18] = {
     "NONE",
     "Ping",
     "AddFixedUserMarker",
@@ -152,13 +157,14 @@ inline const char * const *EnumNamesMessage() {
     "SendBossQuietDamage",
     "BodyPosition",
     "CarryMotion",
+    "CarryOffset",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameMessage(Message e) {
-  if (::flatbuffers::IsOutRange(e, Message_NONE, Message_CarryMotion)) return "";
+  if (::flatbuffers::IsOutRange(e, Message_NONE, Message_CarryOffset)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesMessage()[index];
 }
@@ -225,6 +231,10 @@ template<> struct MessageTraits<DynamiteMessage::BodyPosition> {
 
 template<> struct MessageTraits<DynamiteMessage::CarryMotion> {
   static const Message enum_value = Message_CarryMotion;
+};
+
+template<> struct MessageTraits<DynamiteMessage::CarryOffset> {
+  static const Message enum_value = Message_CarryOffset;
 };
 
 bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Message type);
@@ -557,6 +567,9 @@ struct MessageWrapper FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const DynamiteMessage::CarryMotion *msg_as_CarryMotion() const {
     return msg_type() == DynamiteMessage::Message_CarryMotion ? static_cast<const DynamiteMessage::CarryMotion *>(msg()) : nullptr;
   }
+  const DynamiteMessage::CarryOffset *msg_as_CarryOffset() const {
+    return msg_type() == DynamiteMessage::Message_CarryOffset ? static_cast<const DynamiteMessage::CarryOffset *>(msg()) : nullptr;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_PACKET_NUM, 4) &&
@@ -625,6 +638,10 @@ template<> inline const DynamiteMessage::BodyPosition *MessageWrapper::msg_as<Dy
 
 template<> inline const DynamiteMessage::CarryMotion *MessageWrapper::msg_as<DynamiteMessage::CarryMotion>() const {
   return msg_as_CarryMotion();
+}
+
+template<> inline const DynamiteMessage::CarryOffset *MessageWrapper::msg_as<DynamiteMessage::CarryOffset>() const {
+  return msg_as_CarryOffset();
 }
 
 struct MessageWrapperBuilder {
@@ -2080,6 +2097,97 @@ inline ::flatbuffers::Offset<CarryMotion> CreateCarryMotion(
   return builder_.Finish();
 }
 
+struct CarryOffset FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CarryOffsetBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OBJECT_ID = 4,
+    VT_OFFSET = 6,
+    VT_ROT_X = 8,
+    VT_ROT_Y = 10,
+    VT_ROT_Z = 12,
+    VT_ROT_W = 14
+  };
+  uint32_t object_id() const {
+    return GetField<uint32_t>(VT_OBJECT_ID, 0);
+  }
+  const DynamiteMessage::Vec3 *offset() const {
+    return GetStruct<const DynamiteMessage::Vec3 *>(VT_OFFSET);
+  }
+  float rot_x() const {
+    return GetField<float>(VT_ROT_X, 0.0f);
+  }
+  float rot_y() const {
+    return GetField<float>(VT_ROT_Y, 0.0f);
+  }
+  float rot_z() const {
+    return GetField<float>(VT_ROT_Z, 0.0f);
+  }
+  float rot_w() const {
+    return GetField<float>(VT_ROT_W, 0.0f);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_OBJECT_ID, 4) &&
+           VerifyField<DynamiteMessage::Vec3>(verifier, VT_OFFSET, 4) &&
+           VerifyField<float>(verifier, VT_ROT_X, 4) &&
+           VerifyField<float>(verifier, VT_ROT_Y, 4) &&
+           VerifyField<float>(verifier, VT_ROT_Z, 4) &&
+           VerifyField<float>(verifier, VT_ROT_W, 4) &&
+           verifier.EndTable();
+  }
+};
+
+struct CarryOffsetBuilder {
+  typedef CarryOffset Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_object_id(uint32_t object_id) {
+    fbb_.AddElement<uint32_t>(CarryOffset::VT_OBJECT_ID, object_id, 0);
+  }
+  void add_offset(const DynamiteMessage::Vec3 *offset) {
+    fbb_.AddStruct(CarryOffset::VT_OFFSET, offset);
+  }
+  void add_rot_x(float rot_x) {
+    fbb_.AddElement<float>(CarryOffset::VT_ROT_X, rot_x, 0.0f);
+  }
+  void add_rot_y(float rot_y) {
+    fbb_.AddElement<float>(CarryOffset::VT_ROT_Y, rot_y, 0.0f);
+  }
+  void add_rot_z(float rot_z) {
+    fbb_.AddElement<float>(CarryOffset::VT_ROT_Z, rot_z, 0.0f);
+  }
+  void add_rot_w(float rot_w) {
+    fbb_.AddElement<float>(CarryOffset::VT_ROT_W, rot_w, 0.0f);
+  }
+  explicit CarryOffsetBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CarryOffset> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CarryOffset>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CarryOffset> CreateCarryOffset(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t object_id = 0,
+    const DynamiteMessage::Vec3 *offset = nullptr,
+    float rot_x = 0.0f,
+    float rot_y = 0.0f,
+    float rot_z = 0.0f,
+    float rot_w = 0.0f) {
+  CarryOffsetBuilder builder_(_fbb);
+  builder_.add_rot_w(rot_w);
+  builder_.add_rot_z(rot_z);
+  builder_.add_rot_y(rot_y);
+  builder_.add_rot_x(rot_x);
+  builder_.add_offset(offset);
+  builder_.add_object_id(object_id);
+  return builder_.Finish();
+}
+
 inline bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Message type) {
   switch (type) {
     case Message_NONE: {
@@ -2143,6 +2251,10 @@ inline bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Me
     }
     case Message_CarryMotion: {
       auto ptr = reinterpret_cast<const DynamiteMessage::CarryMotion *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Message_CarryOffset: {
+      auto ptr = reinterpret_cast<const DynamiteMessage::CarryOffset *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;

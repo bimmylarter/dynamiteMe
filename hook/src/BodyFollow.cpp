@@ -62,6 +62,7 @@ namespace Dynamite::BodyFollow {
         if (objectID != followID) {
             spdlog::info("BodyFollow, following soldier {} carried by partner", objectID);
             followID = objectID;
+            attached = false;
             followStart = Now();
             havePos = false;
         }
@@ -120,9 +121,17 @@ namespace Dynamite::BodyFollow {
         }
 
         alignas(16) float rot[4];
-        const bool haveRot = attached && PlayerProbe::PartnerRotation(rot);
+        bool haveRot = false;
         if (attached) {
-            std::copy(std::begin(aim), std::end(aim), std::begin(cur)); // carried pose is relative to the carrier, no easing
+            // carried pose: exactly where the carrier's game has the soldier, relative to the carrier
+            float placed[3];
+            if (PlayerProbe::CarriedPlacement(followID, placed, rot)) {
+                std::copy(std::begin(placed), std::end(placed), std::begin(cur));
+                haveRot = true;
+            } else {
+                std::copy(std::begin(aim), std::end(aim), std::begin(cur));
+                haveRot = PlayerProbe::PartnerRotation(rot);
+            }
         }
         if (SoldierWarp::Warp(followID, cur[0], cur[1], cur[2], false, haveRot ? rot : nullptr) < 0) {
             havePos = false; // recapture on next frame
@@ -134,6 +143,9 @@ namespace Dynamite::BodyFollow {
     double FollowedFor() { return followID == noBody ? 0.0 : Now() - followStart; }
 
     void SetAttached(const bool a) {
+        if (followID == noBody) {
+            return;
+        }
         if (a != attached) {
             spdlog::info("BodyFollow, soldier {} {}", followID, a ? "attached to carrier" : "detached");
         }

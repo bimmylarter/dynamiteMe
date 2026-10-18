@@ -173,7 +173,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v17, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v18, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -299,6 +299,11 @@ namespace Dynamite::PlayerProbe {
         std::vector<CarryMotionUpdate> outgoing;
         std::atomic<uint32_t> localCarryTarget{0xffff};
         std::atomic<bool> replaying{false};
+        // carried soldier's motion ctrl / index on the carrier, learned from its carried-AI requests
+        std::atomic<uint64_t> carriedCtrl{0};
+        std::atomic<uint32_t> carriedIndex{0xffffffff};
+        std::atomic<uint32_t> carriedID{0xffff};
+        std::atomic<uint64_t> forwardUntil{0}; // GetTickCount64: keep forwarding soldier requests a while after the drop
 
         // watcher side: soldier motion ctrl by soldier local index, learned from soldier motion requests
         constexpr int maxSoldierSlots = 64;
@@ -314,8 +319,16 @@ namespace Dynamite::PlayerProbe {
                     std::lock_guard lock(outMutex);
                     outgoing.push_back({.body = false, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags});
                 } else if (ret >= carriedAiStart && ret < carriedAiEnd && localCarryTarget.load() != 0xffff) {
+                    carriedCtrl = reinterpret_cast<uint64_t>(ctrl);
+                    carriedIndex = player;
+                    carriedID = localCarryTarget.load();
                     std::lock_guard lock(outMutex);
-                    outgoing.push_back({.body = true, .objectID = localCarryTarget.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
+                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
+                } else if (reinterpret_cast<uint64_t>(ctrl) == carriedCtrl.load() && player == carriedIndex.load() &&
+                           (localCarryTarget.load() != 0xffff || GetTickCount64() < forwardUntil.load())) {
+                    // everything else the carried soldier plays while carried and while being put down
+                    std::lock_guard lock(outMutex);
+                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
                 }
                 if (ctrl != motionCtrl[0] && ctrl != motionCtrl[1] && player < maxSoldierSlots) {
                     soldierCtrlByIndex[player] = reinterpret_cast<uint64_t>(ctrl);
@@ -459,6 +472,64 @@ namespace Dynamite::PlayerProbe {
             }
         }
 
+        // --- v18: carried soldier transform relative to the carrier ---
+        void QuatMul(const float a[4], const float b[4], float out[4]) {
+            const float x = a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1];
+            const float y = a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0];
+            const float z = a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3];
+            const float w = a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2];
+            out[0] = x; out[1] = y; out[2] = z; out[3] = w;
+        }
+
+        void QuatRotate(const float q[4], const float v[3], float out[3]) {
+            const float p[4] = {v[0], v[1], v[2], 0.0f};
+            const float c[4] = {-q[0], -q[1], -q[2], q[3]};
+            float t[4], r[4];
+            QuatMul(q, p, t);
+            QuatMul(t, c, r);
+            out[0] = r[0]; out[1] = r[1]; out[2] = r[2];
+        }
+
+        bool RecordTransform(const int player, float pos[3], float rot[4]) {
+            const auto buffer = *reinterpret_cast<int32_t *>(Exe(infoBufferIndex));
+            if (buffer != 0 && buffer != 1) {
+                return false;
+            }
+            const auto rec = Record(buffer, player);
+            memcpy(pos, rec + 0x10, 3 * sizeof(float));
+            memcpy(rot, rec + 0x70, 4 * sizeof(float));
+            return rot[3] != 0.0f || rot[1] != 0.0f;
+        }
+
+        void SendCarryOffset(const int local, const double now) {
+            static double next = 0;
+            static uint32_t logged = 0xffff;
+            const auto target = localCarryTarget.load() != 0xffff ? localCarryTarget.load() : (GetTickCount64() < forwardUntil.load() ? carriedID.load() : 0xffff);
+            if (target == 0xffff || now < next) {
+                return;
+            }
+            next = now + 0.1;
+            float sp[3], sr[4], cp[3], cr[4];
+            if (!SoldierWarp::GetTransform(target, sp, sr)) {
+                SoldierWarp::Capture(target);
+                return;
+            }
+            if (!RecordTransform(local, cp, cr)) {
+                return;
+            }
+            const float d[3] = {sp[0] - cp[0], sp[1] - cp[1], sp[2] - cp[2]};
+            const float inv[4] = {-cr[0], -cr[1], -cr[2], cr[3]};
+            float off[3], rel[4];
+            QuatRotate(inv, d, off);
+            QuatMul(inv, sr, rel);
+            if (logged != target) {
+                logged = target;
+                spdlog::info("[playerprobe] carry offset {}: soldier pos {} {} {} rot {} {} {} {} | carrier pos {} {} {} rot {} {} {} {} | offset {} {} {} rel {} {} {} {}",
+                    target, sp[0], sp[1], sp[2], sr[0], sr[1], sr[2], sr[3], cp[0], cp[1], cp[2], cr[0], cr[1], cr[2], cr[3], off[0], off[1], off[2], rel[0], rel[1], rel[2], rel[3]);
+            }
+            g_hook->dynamiteSyncImpl.SendCarryOffset(target, off, rel);
+        }
+
         void DumpWriters() {
             const auto n = std::min(writerCount.load(), maxWriters);
             spdlog::info("[playerprobe] remote player record writers: {}", n);
@@ -508,7 +579,12 @@ namespace Dynamite::PlayerProbe {
         // carrier side: remember what we carry, send queued carry animation requests
         if (auto st = StateArrays()) {
             const int local = g_hook->cfg.Host ? 0 : 1;
-            localCarryTarget = (*(uint8_t **)(st + 0x28))[local] ? (*(uint16_t **)(st + 0xd8))[local] : 0xffff;
+            const uint32_t target = (*(uint8_t **)(st + 0x28))[local] ? (*(uint16_t **)(st + 0xd8))[local] : 0xffff;
+            if (target == 0xffff && localCarryTarget.load() != 0xffff) {
+                forwardUntil = GetTickCount64() + 4000;
+            }
+            localCarryTarget = target;
+            SendCarryOffset(local, now);
         }
         {
             std::vector<CarryMotionUpdate> send;
@@ -604,5 +680,25 @@ namespace Dynamite::PlayerProbe {
         const auto rec = Record(buffer, g_hook->cfg.Host ? 1 : 0);
         memcpy(out, rec + 0x70, 16); // rotation quaternion x y z w
         return out[3] != 0.0f || out[1] != 0.0f;
+    }
+
+    bool CarriedPlacement(const uint32_t objectID, float pos[3], float rot[4]) {
+        if (!CheckVersion()) {
+            return false;
+        }
+        float off[3], rel[4], cp[3], cr[4];
+        if (!g_hook->dynamiteSyncImpl.GetCarryOffset(objectID, off, rel, 1.0)) {
+            return false;
+        }
+        if (!RecordTransform(g_hook->cfg.Host ? 1 : 0, cp, cr)) {
+            return false;
+        }
+        float w[3];
+        QuatRotate(cr, off, w);
+        pos[0] = cp[0] + w[0];
+        pos[1] = cp[1] + w[1];
+        pos[2] = cp[2] + w[2];
+        QuatMul(cr, rel, rot);
+        return true;
     }
 }

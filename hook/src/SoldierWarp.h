@@ -22,6 +22,9 @@ namespace Dynamite::SoldierWarp {
     // -1 on failure (soldier not found or captured data does not match soldier).
     int Warp(uint32_t objectID, float x, float y, float z, bool log = true, const float *rotation = nullptr);
 
+    // current position (x y z) and rotation (4 floats) of a captured soldier's character object
+    bool GetTransform(uint32_t objectID, float pos[3], float rot[4]);
+
     // local index of a captured soldier (true if known)
     bool LocalIndex(uint32_t objectID, uint32_t &index);
 }
