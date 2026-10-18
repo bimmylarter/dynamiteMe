@@ -237,6 +237,122 @@ namespace Dynamite::PlayerProbe {
         bool haveState = false;
         bool injecting = false;
 
+        // --- motion controller (v14) ---
+        // Carry code changes the player's animation with ctrl->vf[0x170](ctrl, playerIndex, layer, stateHash, float blend, int flags),
+        // ctrl = *(*(playerSystem + 0x78) + 0x238). Player systems: net = *(updater + 0x50),
+        // system index of player p = (*(u8 **)(net + 0x78))[p], system = (*(void ***)(net + 0x50))[index].
+        using MotionFunc = uint64_t(__fastcall *)(void *ctrl, uint32_t player, uint32_t layer, uint64_t state, float blend, int32_t flags);
+        constexpr int maxMotionHooks = 4;
+        struct MotionHook {
+            uint64_t target;
+            MotionFunc original;
+        };
+        MotionHook motionHooks[maxMotionHooks]{};
+        int motionHookCount = 0;
+        void *motionCtrl[2] = {nullptr, nullptr};
+
+        std::atomic<int> motionLogBudget{0};
+        constexpr int maxMotionSeen = 600;
+        uint64_t motionSeen[maxMotionSeen][3];
+        int motionSeenCount = 0;
+        std::atomic_flag motionLock = ATOMIC_FLAG_INIT;
+
+        void LogMotion(const int hook, void *ctrl, const uint32_t player, const uint32_t layer, const uint64_t state, const float blend, const int32_t flags, const uint64_t ret) {
+            bool fresh = false;
+            while (motionLock.test_and_set(std::memory_order_acquire)) {
+            }
+            const uint64_t key = (static_cast<uint64_t>(player) << 56) ^ (static_cast<uint64_t>(layer) << 48) ^ state;
+            int i = 0;
+            for (; i < motionSeenCount; i++) {
+                if (motionSeen[i][0] == key && motionSeen[i][1] == ret) {
+                    motionSeen[i][2]++;
+                    break;
+                }
+            }
+            if (i == motionSeenCount && motionSeenCount < maxMotionSeen) {
+                motionSeen[i][0] = key;
+                motionSeen[i][1] = ret;
+                motionSeen[i][2] = 1;
+                motionSeenCount++;
+                fresh = true;
+            }
+            motionLock.clear(std::memory_order_release);
+            // every new (player, layer, state, caller), plus every call during a short window after a carry starts
+            if (fresh || (motionLogBudget.load() > 0 && motionLogBudget.fetch_sub(1) > 0)) {
+                spdlog::info("[playerprobe] motion{} ctrl {} player {} layer {} state {:012x} blend {} flags {:#x} from {:#x}{}",
+                    hook, ctrl, player, layer, state & 0xffffffffffffull, blend, flags, ret, fresh ? " (new)" : "");
+            }
+        }
+
+        template <int N>
+        uint64_t __fastcall hkMotion(void *ctrl, uint32_t player, uint32_t layer, uint64_t state, float blend, int32_t flags) {
+            LogMotion(N, ctrl, player, layer, state, blend, flags, ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0))));
+            return motionHooks[N].original(ctrl, player, layer, state, blend, flags);
+        }
+
+        void *hookFuncs[maxMotionHooks] = {
+            reinterpret_cast<void *>(&hkMotion<0>), reinterpret_cast<void *>(&hkMotion<1>),
+            reinterpret_cast<void *>(&hkMotion<2>), reinterpret_cast<void *>(&hkMotion<3>)};
+
+        void FindMotionControllers() {
+            const auto u = reinterpret_cast<char *>(infoUpdater.load());
+            if (u == nullptr) {
+                return;
+            }
+            const auto net = *(char **)(u + 0x50);
+            if (net == nullptr) {
+                return;
+            }
+            const auto sysIndex = *(uint8_t **)(net + 0x78);
+            const auto systems = *(char ***)(net + 0x50);
+            if (sysIndex == nullptr || systems == nullptr) {
+                return;
+            }
+            for (int p = 0; p < 2; p++) {
+                const auto si = sysIndex[p];
+                static uint8_t loggedIndex[2] = {0xfe, 0xfe};
+                if (loggedIndex[p] != si) {
+                    loggedIndex[p] = si;
+                    spdlog::info("[playerprobe] player {} belongs to player system #{}", p, si);
+                }
+                if (si == 0xff) {
+                    continue;
+                }
+                const auto sys = systems[si];
+                if (sys == nullptr) {
+                    continue;
+                }
+                const auto tbl = *(char **)(sys + 0x78);
+                if (tbl == nullptr) {
+                    continue;
+                }
+                const auto ctrl = *(void **)(tbl + 0x238);
+                if (ctrl == nullptr || ctrl == motionCtrl[p]) {
+                    continue;
+                }
+                motionCtrl[p] = ctrl;
+                const auto vt = *(uint64_t **)ctrl;
+                const auto fn = vt[0x170 / 8];
+                spdlog::info("[playerprobe] player {} system #{} {} table {} motion ctrl {} vtable {:#x} vf170 {:#x} table base player {}",
+                    p, si, (void *)sys, (void *)tbl, ctrl, ToExe(reinterpret_cast<uint64_t>(vt)), ToExe(fn), *(uint32_t *)(tbl + 8));
+                bool hooked = false;
+                for (int h = 0; h < motionHookCount; h++) {
+                    hooked |= motionHooks[h].target == fn;
+                }
+                if (!hooked && motionHookCount < maxMotionHooks && InExe(fn)) {
+                    const auto h = motionHookCount;
+                    motionHooks[h].target = fn;
+                    if (MH_CreateHook(reinterpret_cast<void *>(fn), hookFuncs[h], reinterpret_cast<void **>(&motionHooks[h].original)) == MH_OK &&
+                        MH_EnableHook(reinterpret_cast<void *>(fn)) == MH_OK) {
+                        motionHookCount++;
+                        spdlog::info("[playerprobe] motion function {:#x} hooked as motion{}", ToExe(fn), h);
+                    } else {
+                        spdlog::info("[playerprobe] cannot hook motion function {:#x}", ToExe(fn));
+                    }
+                }
+            }
+        }
+
         void DumpWriters() {
             const auto n = std::min(writerCount.load(), maxWriters);
             spdlog::info("[playerprobe] remote player record writers: {}", n);
@@ -282,25 +398,27 @@ namespace Dynamite::PlayerProbe {
         }
 
         InstallInfoHook();
+        FindMotionControllers();
 
-        // experiment: while partner carries a soldier (3 s in), mark partner as carrying in the state arrays
-        if (auto st = StateArrays()) {
-            const auto followed = BodyFollow::FollowedID();
-            const bool want = followed != 0xffffffff && BodyFollow::FollowedFor() > 3.0;
-            if (want) {
-                (*(uint8_t **)(st + 0x28))[remote] = 1;
-                (*(uint16_t **)(st + 0xd8))[remote] = static_cast<uint16_t>(followed);
-                if (!injecting) {
-                    spdlog::info("[playerprobe] inject: partner {} marked as carrying {}", remote, followed);
-                }
-                injecting = true;
-            } else if (injecting) {
-                (*(uint8_t **)(st + 0x28))[remote] = 0;
-                (*(uint16_t **)(st + 0xd8))[remote] = 0xffff;
-                injecting = false;
-                spdlog::info("[playerprobe] inject: partner {} carry mark removed", remote);
+        // log every motion call for a few seconds after a carry starts (local or partner)
+        {
+            static bool wasCarrying = false;
+            bool carrying = BodyFollow::FollowedID() != 0xffffffff;
+            if (auto st = StateArrays()) {
+                carrying |= (*(uint8_t **)(st + 0x28))[g_hook->cfg.Host ? 0 : 1] != 0;
             }
+            if (carrying && !wasCarrying) {
+                motionLogBudget = 150;
+                spdlog::info("[playerprobe] carry started, logging motion calls");
+            }
+            if (!carrying && wasCarrying) {
+                motionLogBudget = 150;
+                spdlog::info("[playerprobe] carry ended, logging motion calls");
+            }
+            wasCarrying = carrying;
+        }
 
+        if (auto st = StateArrays()) {
             for (int p = 0; p < 2; p++) {
                 const auto cur = ReadState(st, p);
                 if (!haveState || !(cur == lastState[p])) {
