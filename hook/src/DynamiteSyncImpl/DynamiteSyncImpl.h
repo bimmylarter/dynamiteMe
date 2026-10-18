@@ -29,6 +29,16 @@ namespace Dynamite {
         bool dropped;
     };
 
+    // Carry animation request received from partner (see CarryMotion in schema), applied on the game thread.
+    struct CarryMotionUpdate {
+        bool body; // false: partner's character, true: the soldier partner carries
+        uint32_t objectID;
+        uint32_t layer;
+        uint64_t state;
+        float blend;
+        int32_t flags;
+    };
+
     class DynamiteSyncImpl {
       public:
         DynamiteSyncImpl();
@@ -106,6 +116,11 @@ namespace Dynamite {
         std::optional<BodyUpdate> PopBodyUpdate();
         void ClearBodyUpdates();
 
+        // Carry animation sync, queued like body updates
+        void SendCarryMotion(const CarryMotionUpdate &m);
+        void HandleCarryMotion(const DynamiteMessage::MessageWrapper *w);
+        std::optional<CarryMotionUpdate> PopCarryMotion();
+
         void *steamUDPAddress = nullptr;
         void *steamUDPSocketInfo = nullptr;
         void *steamUDPSocket = nullptr;
@@ -119,6 +134,7 @@ namespace Dynamite {
         std::mutex bodyMutex;
         std::deque<BodyUpdate> bodyUpdates{};
         static constexpr size_t maxBodyUpdates = 256;
+        std::deque<CarryMotionUpdate> carryMotions{};
         std::vector<std::string> enemyVars = {
             // "cpNames",
             // "cpFlags",

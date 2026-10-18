@@ -19,6 +19,9 @@ namespace Dynamite::BodyFollow {
     uint32_t FollowedID();
     double FollowedFor();
 
+    // body plays the carried animation: place it exactly at the carrier, facing the carrier's direction
+    void SetAttached(bool attached);
+
     // forget followed body (session end)
     void Reset();
 }

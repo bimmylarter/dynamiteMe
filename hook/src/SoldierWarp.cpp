@@ -170,7 +170,7 @@ namespace Dynamite::SoldierWarp {
         return false;
     }
 
-    int Warp(const uint32_t objectID, const float x, const float y, const float z, const bool log) {
+    int Warp(const uint32_t objectID, const float x, const float y, const float z, const bool log, const float *rotation) {
         if (capturedObjectID.load() != objectID || capturedController.load() == 0) {
             return 0;
         }
@@ -203,6 +203,9 @@ namespace Dynamite::SoldierWarp {
         // keep current orientation
         alignas(16) float rot[4];
         memcpy(rot, reinterpret_cast<GetRotFunc>(objVtable[0x78 / 8])(obj), sizeof(rot));
+        if (rotation != nullptr) {
+            memcpy(rot, rotation, sizeof(rot));
+        }
         alignas(16) float pos[4] = {x, y, z, 0.0f};
 
         reinterpret_cast<SetRotFunc>(objVtable[0x70 / 8])(obj, rot);
@@ -212,5 +215,13 @@ namespace Dynamite::SoldierWarp {
             spdlog::info("{}, soldier {} moved to {} {} {}", __PRETTY_FUNCTION__, objectID, x, y, z);
         }
         return 1;
+    }
+
+    bool LocalIndex(const uint32_t objectID, uint32_t &index) {
+        if (capturedObjectID.load() != objectID || capturedController.load() == 0) {
+            return false;
+        }
+        index = capturedLocalIndex.load();
+        return true;
     }
 }

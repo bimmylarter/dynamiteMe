@@ -2,6 +2,10 @@
 
 #include "BodyFollow.h"
 #include "CarryProbe.h"
+#include "SoldierWarp.h"
+#include "DynamiteSyncImpl/DynamiteSyncImpl.h"
+#include <mutex>
+#include <vector>
 #include "DynamiteHook.h"
 #include "MinHook.h"
 #include "dynamite.h"
@@ -169,7 +173,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v16, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v17, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -286,9 +290,37 @@ namespace Dynamite::PlayerProbe {
             }
         }
 
+        // --- v17: carry animation forwarding ---
+        // carrier side: requests made by the local player's carry code (player ctrl) and by the carried soldier's
+        // carried-AI (soldier ctrl) are sent to the partner, who replays them on our character / that soldier.
+        constexpr uint64_t carryCodeStart = 0x141128000, carryCodeEnd = 0x141140000;       // player carry component
+        constexpr uint64_t carriedAiStart = 0x1413b2000, carriedAiEnd = 0x1413b6000;       // soldier carried AI
+        std::mutex outMutex;
+        std::vector<CarryMotionUpdate> outgoing;
+        std::atomic<uint32_t> localCarryTarget{0xffff};
+        std::atomic<bool> replaying{false};
+
+        // watcher side: soldier motion ctrl by soldier local index, learned from soldier motion requests
+        constexpr int maxSoldierSlots = 64;
+        std::atomic<uint64_t> soldierCtrlByIndex[maxSoldierSlots]{};
+
         template <int N>
         uint64_t __fastcall hkMotion(void *ctrl, uint32_t player, uint32_t layer, uint64_t state, float blend, int32_t flags) {
-            LogMotion(N, ctrl, player, layer, state, blend, flags, ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0))));
+            const auto ret = ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0)));
+            LogMotion(N, ctrl, player, layer, state, blend, flags, ret);
+            if (!replaying.load()) {
+                const int local = g_hook->cfg.Host ? 0 : 1;
+                if (ctrl == motionCtrl[local] && player == static_cast<uint32_t>(local) && ret >= carryCodeStart && ret < carryCodeEnd) {
+                    std::lock_guard lock(outMutex);
+                    outgoing.push_back({.body = false, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags});
+                } else if (ret >= carriedAiStart && ret < carriedAiEnd && localCarryTarget.load() != 0xffff) {
+                    std::lock_guard lock(outMutex);
+                    outgoing.push_back({.body = true, .objectID = localCarryTarget.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
+                }
+                if (ctrl != motionCtrl[0] && ctrl != motionCtrl[1] && player < maxSoldierSlots) {
+                    soldierCtrlByIndex[player] = reinterpret_cast<uint64_t>(ctrl);
+                }
+            }
             return motionHooks[N].original(ctrl, player, layer, state, blend, flags);
         }
 
@@ -391,55 +423,39 @@ namespace Dynamite::PlayerProbe {
             }
         }
 
-        // --- v16: play the local player's carry animation sequence on the partner's character ---
-        // Recorded on the carrier (player motion ctrl, vf170): pickup layer 0 904c34eb558a (or 4b4cd3a6e541, by body
-        // orientation) -> a0b4a45711dd -> 8f29c6f1b260 -> 455ceb089372, then carry layer 1 6ef53f69c57b; putdown layer 1 4766b491f767.
-        struct AnimStep {
-            double at;
-            uint32_t layer;
-            uint64_t state;
-            float blend;
-        };
-        constexpr AnimStep pickupSteps[] = {
-            {0.00, 0, 0x904c34eb558aull, 15.0f},
-            {0.05, 0, 0xa0b4a45711ddull, 10.0f},
-            {0.55, 0, 0x8f29c6f1b260ull, 0.0f},
-            {1.90, 0, 0x455ceb089372ull, 0.0f},
-            {3.35, 1, 0x6ef53f69c57bull, 10.0f},
-        };
-        constexpr AnimStep putdownStep = {0.0, 1, 0x4766b491f767ull, 0.0f};
-
-        uint32_t animBody = 0xffffffff;
-        double animStart = 0;
-        int animNext = 0;
-
-        void PlayOnPartner(const int remote, const AnimStep &step) {
-            const auto ctrl = motionCtrl[remote];
-            if (ctrl == nullptr) {
-                spdlog::info("[playerprobe] anim: no motion ctrl for partner {}, cannot play {:012x}", remote, step.state);
+        void Replay(void *ctrl, const uint32_t index, const CarryMotionUpdate &m) {
+            const auto fn = reinterpret_cast<MotionFunc>((*(void ***)ctrl)[0x170 / 8]);
+            if (motionHookCount == 0 || reinterpret_cast<uint64_t>(fn) != motionHooks[0].target) {
+                spdlog::info("[playerprobe] replay: ctrl {} is not a motion controller, skipped", ctrl);
                 return;
             }
-            const auto fn = reinterpret_cast<MotionFunc>((*(void ***)ctrl)[0x170 / 8]);
-            spdlog::info("[playerprobe] anim: partner {} layer {} state {:012x} blend {}", remote, step.layer, step.state, step.blend);
-            fn(ctrl, static_cast<uint32_t>(remote), step.layer, step.state, step.blend, 0);
+            replaying = true;
+            fn(ctrl, index, m.layer, m.state, m.blend, m.flags);
+            replaying = false;
         }
 
-        void UpdatePartnerAnim(const int remote, const double now) {
-            const auto followed = BodyFollow::FollowedID();
-            if (followed != animBody) {
-                if (animBody != 0xffffffff) {
-                    PlayOnPartner(remote, putdownStep);
+        void ApplyCarryMotion(const int remote, const CarryMotionUpdate &m) {
+            if (!m.body) {
+                const auto ctrl = motionCtrl[remote];
+                spdlog::info("[playerprobe] replay: partner {} layer {} state {:012x} blend {} flags {:#x}{}", remote, m.layer, m.state, m.blend, m.flags,
+                    ctrl ? "" : " (no ctrl)");
+                if (ctrl) {
+                    Replay(ctrl, static_cast<uint32_t>(remote), m);
                 }
-                animBody = followed;
-                animStart = now;
-                animNext = 0;
-            }
-            if (animBody == 0xffffffff) {
                 return;
             }
-            while (animNext < static_cast<int>(std::size(pickupSteps)) && now - animStart >= pickupSteps[animNext].at) {
-                PlayOnPartner(remote, pickupSteps[animNext]);
-                animNext++;
+            uint32_t index = 0;
+            if (!SoldierWarp::LocalIndex(m.objectID, index) || index >= maxSoldierSlots) {
+                SoldierWarp::Capture(m.objectID);
+                spdlog::info("[playerprobe] replay: soldier {} local index unknown yet, state {:012x} skipped", m.objectID, m.state);
+                return;
+            }
+            const auto ctrl = reinterpret_cast<void *>(soldierCtrlByIndex[index].load());
+            spdlog::info("[playerprobe] replay: soldier {} (index {}, ctrl {}) layer {} state {:012x} blend {} flags {:#x}", m.objectID, index, ctrl, m.layer, m.state,
+                m.blend, m.flags);
+            if (ctrl) {
+                Replay(ctrl, index, m);
+                BodyFollow::SetAttached(true);
             }
         }
 
@@ -489,7 +505,25 @@ namespace Dynamite::PlayerProbe {
 
         InstallInfoHook();
         FindMotionControllers();
-        UpdatePartnerAnim(remote, now);
+        // carrier side: remember what we carry, send queued carry animation requests
+        if (auto st = StateArrays()) {
+            const int local = g_hook->cfg.Host ? 0 : 1;
+            localCarryTarget = (*(uint8_t **)(st + 0x28))[local] ? (*(uint16_t **)(st + 0xd8))[local] : 0xffff;
+        }
+        {
+            std::vector<CarryMotionUpdate> send;
+            {
+                std::lock_guard lock(outMutex);
+                send.swap(outgoing);
+            }
+            for (const auto &m : send) {
+                g_hook->dynamiteSyncImpl.SendCarryMotion(m);
+            }
+        }
+        // watcher side: replay partner's carry animation requests
+        while (const auto m = g_hook->dynamiteSyncImpl.PopCarryMotion()) {
+            ApplyCarryMotion(remote, *m);
+        }
 
         // log every motion call for a few seconds after a carry starts (local or partner)
         {
@@ -557,5 +591,18 @@ namespace Dynamite::PlayerProbe {
             memcpy(previous[p], cur, infoSize);
         }
         havePrevious = true;
+    }
+
+    bool PartnerRotation(float out[4]) {
+        if (!CheckVersion()) {
+            return false;
+        }
+        const auto buffer = *reinterpret_cast<int32_t *>(Exe(infoBufferIndex));
+        if (buffer != 0 && buffer != 1) {
+            return false;
+        }
+        const auto rec = Record(buffer, g_hook->cfg.Host ? 1 : 0);
+        memcpy(out, rec + 0x70, 16); // rotation quaternion x y z w
+        return out[3] != 0.0f || out[1] != 0.0f;
     }
 }

@@ -7,6 +7,9 @@
 namespace Dynamite::PlayerProbe {
     // call every frame on game thread
     void Tick();
+
+    // partner character rotation (quaternion x y z w) from player info, false if unknown
+    bool PartnerRotation(float out[4]);
 }
 
 #endif // HOOK_PLAYERPROBE_H

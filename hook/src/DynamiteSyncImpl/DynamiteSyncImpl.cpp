@@ -1217,6 +1217,50 @@ namespace Dynamite {
     void DynamiteSyncImpl::ClearBodyUpdates() {
         std::lock_guard lock(bodyMutex);
         bodyUpdates.clear();
+        carryMotions.clear();
+    }
+
+    void DynamiteSyncImpl::SendCarryMotion(const CarryMotionUpdate &m) {
+        packetNumber++;
+        flatbuffers::FlatBufferBuilder builder(128);
+        const auto target = m.body ? DynamiteMessage::CarryMotionTarget_body : DynamiteMessage::CarryMotionTarget_carrier;
+        const auto sv = DynamiteMessage::CreateCarryMotion(builder, target, m.objectID, m.layer, m.state, m.blend, m.flags);
+        const auto message = DynamiteMessage::CreateMessageWrapper(builder, packetNumber, DynamiteMessage::Message_CarryMotion, sv.Union());
+        builder.Finish(message);
+        const auto res = SendRaw(&builder);
+        spdlog::info("{}, body={} objectID={} layer={} state={:012x} blend={} flags={:#x} res={}",
+            __PRETTY_FUNCTION__, m.body, m.objectID, m.layer, m.state, m.blend, m.flags, res);
+    }
+
+    void DynamiteSyncImpl::HandleCarryMotion(const DynamiteMessage::MessageWrapper *w) {
+        const auto m = w->msg_as_CarryMotion();
+        if (m == nullptr) {
+            spdlog::error("{}, malformed message", __PRETTY_FUNCTION__);
+            return;
+        }
+        const CarryMotionUpdate u{
+            .body = m->target() == DynamiteMessage::CarryMotionTarget_body,
+            .objectID = m->object_id(),
+            .layer = m->layer(),
+            .state = m->state(),
+            .blend = m->blend(),
+            .flags = m->flags(),
+        };
+        std::lock_guard lock(bodyMutex);
+        if (carryMotions.size() >= maxBodyUpdates) {
+            carryMotions.pop_front();
+        }
+        carryMotions.push_back(u);
+    }
+
+    std::optional<CarryMotionUpdate> DynamiteSyncImpl::PopCarryMotion() {
+        std::lock_guard lock(bodyMutex);
+        if (carryMotions.empty()) {
+            return std::nullopt;
+        }
+        const auto res = carryMotions.front();
+        carryMotions.pop_front();
+        return res;
     }
 
     bool DynamiteSyncImpl::SendRaw(const flatbuffers::FlatBufferBuilder *builder) const {
@@ -1342,6 +1386,9 @@ namespace Dynamite {
             break;
         case DynamiteMessage::Message_SendBossQuietDamage:
             HandleSendBossQuietDamage(wrapper);
+            break;
+        case DynamiteMessage::Message_CarryMotion:
+            HandleCarryMotion(wrapper);
             break;
         case DynamiteMessage::Message_BodyPosition:
             HandleBodyPosition(wrapper);

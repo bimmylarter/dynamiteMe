@@ -88,6 +88,9 @@ struct SendBossQuietDamageBuilder;
 struct BodyPosition;
 struct BodyPositionBuilder;
 
+struct CarryMotion;
+struct CarryMotionBuilder;
+
 enum Message : uint8_t {
   Message_NONE = 0,
   Message_Ping = 1,
@@ -104,11 +107,12 @@ enum Message : uint8_t {
   Message_SendBossQuietSetActionTask = 12,
   Message_SendBossQuietDamage = 13,
   Message_BodyPosition = 14,
+  Message_CarryMotion = 15,
   Message_MIN = Message_NONE,
-  Message_MAX = Message_BodyPosition
+  Message_MAX = Message_CarryMotion
 };
 
-inline const Message (&EnumValuesMessage())[15] {
+inline const Message (&EnumValuesMessage())[16] {
   static const Message values[] = {
     Message_NONE,
     Message_Ping,
@@ -124,13 +128,14 @@ inline const Message (&EnumValuesMessage())[15] {
     Message_SendBossQuietSetNextActionTask,
     Message_SendBossQuietSetActionTask,
     Message_SendBossQuietDamage,
-    Message_BodyPosition
+    Message_BodyPosition,
+    Message_CarryMotion
   };
   return values;
 }
 
 inline const char * const *EnumNamesMessage() {
-  static const char * const names[16] = {
+  static const char * const names[17] = {
     "NONE",
     "Ping",
     "AddFixedUserMarker",
@@ -146,13 +151,14 @@ inline const char * const *EnumNamesMessage() {
     "SendBossQuietSetActionTask",
     "SendBossQuietDamage",
     "BodyPosition",
+    "CarryMotion",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameMessage(Message e) {
-  if (::flatbuffers::IsOutRange(e, Message_NONE, Message_BodyPosition)) return "";
+  if (::flatbuffers::IsOutRange(e, Message_NONE, Message_CarryMotion)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesMessage()[index];
 }
@@ -215,6 +221,10 @@ template<> struct MessageTraits<DynamiteMessage::SendBossQuietDamage> {
 
 template<> struct MessageTraits<DynamiteMessage::BodyPosition> {
   static const Message enum_value = Message_BodyPosition;
+};
+
+template<> struct MessageTraits<DynamiteMessage::CarryMotion> {
+  static const Message enum_value = Message_CarryMotion;
 };
 
 bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Message type);
@@ -373,6 +383,36 @@ inline const char *EnumNameBodyState(BodyState e) {
   return EnumNamesBodyState()[index];
 }
 
+enum CarryMotionTarget : uint8_t {
+  CarryMotionTarget_carrier = 0,
+  CarryMotionTarget_body = 1,
+  CarryMotionTarget_MIN = CarryMotionTarget_carrier,
+  CarryMotionTarget_MAX = CarryMotionTarget_body
+};
+
+inline const CarryMotionTarget (&EnumValuesCarryMotionTarget())[2] {
+  static const CarryMotionTarget values[] = {
+    CarryMotionTarget_carrier,
+    CarryMotionTarget_body
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesCarryMotionTarget() {
+  static const char * const names[3] = {
+    "carrier",
+    "body",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameCarryMotionTarget(CarryMotionTarget e) {
+  if (::flatbuffers::IsOutRange(e, CarryMotionTarget_carrier, CarryMotionTarget_body)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesCarryMotionTarget()[index];
+}
+
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) Vec3 FLATBUFFERS_FINAL_CLASS {
  private:
   float x_;
@@ -514,6 +554,9 @@ struct MessageWrapper FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const DynamiteMessage::BodyPosition *msg_as_BodyPosition() const {
     return msg_type() == DynamiteMessage::Message_BodyPosition ? static_cast<const DynamiteMessage::BodyPosition *>(msg()) : nullptr;
   }
+  const DynamiteMessage::CarryMotion *msg_as_CarryMotion() const {
+    return msg_type() == DynamiteMessage::Message_CarryMotion ? static_cast<const DynamiteMessage::CarryMotion *>(msg()) : nullptr;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_PACKET_NUM, 4) &&
@@ -578,6 +621,10 @@ template<> inline const DynamiteMessage::SendBossQuietDamage *MessageWrapper::ms
 
 template<> inline const DynamiteMessage::BodyPosition *MessageWrapper::msg_as<DynamiteMessage::BodyPosition>() const {
   return msg_as_BodyPosition();
+}
+
+template<> inline const DynamiteMessage::CarryMotion *MessageWrapper::msg_as<DynamiteMessage::CarryMotion>() const {
+  return msg_as_CarryMotion();
 }
 
 struct MessageWrapperBuilder {
@@ -1942,6 +1989,97 @@ inline ::flatbuffers::Offset<BodyPosition> CreateBodyPosition(
   return builder_.Finish();
 }
 
+struct CarryMotion FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CarryMotionBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_TARGET = 4,
+    VT_OBJECT_ID = 6,
+    VT_LAYER = 8,
+    VT_STATE = 10,
+    VT_BLEND = 12,
+    VT_FLAGS = 14
+  };
+  DynamiteMessage::CarryMotionTarget target() const {
+    return static_cast<DynamiteMessage::CarryMotionTarget>(GetField<uint8_t>(VT_TARGET, 0));
+  }
+  uint32_t object_id() const {
+    return GetField<uint32_t>(VT_OBJECT_ID, 0);
+  }
+  uint32_t layer() const {
+    return GetField<uint32_t>(VT_LAYER, 0);
+  }
+  uint64_t state() const {
+    return GetField<uint64_t>(VT_STATE, 0);
+  }
+  float blend() const {
+    return GetField<float>(VT_BLEND, 0.0f);
+  }
+  int32_t flags() const {
+    return GetField<int32_t>(VT_FLAGS, 0);
+  }
+  bool Verify(::flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_TARGET, 1) &&
+           VerifyField<uint32_t>(verifier, VT_OBJECT_ID, 4) &&
+           VerifyField<uint32_t>(verifier, VT_LAYER, 4) &&
+           VerifyField<uint64_t>(verifier, VT_STATE, 8) &&
+           VerifyField<float>(verifier, VT_BLEND, 4) &&
+           VerifyField<int32_t>(verifier, VT_FLAGS, 4) &&
+           verifier.EndTable();
+  }
+};
+
+struct CarryMotionBuilder {
+  typedef CarryMotion Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_target(DynamiteMessage::CarryMotionTarget target) {
+    fbb_.AddElement<uint8_t>(CarryMotion::VT_TARGET, static_cast<uint8_t>(target), 0);
+  }
+  void add_object_id(uint32_t object_id) {
+    fbb_.AddElement<uint32_t>(CarryMotion::VT_OBJECT_ID, object_id, 0);
+  }
+  void add_layer(uint32_t layer) {
+    fbb_.AddElement<uint32_t>(CarryMotion::VT_LAYER, layer, 0);
+  }
+  void add_state(uint64_t state) {
+    fbb_.AddElement<uint64_t>(CarryMotion::VT_STATE, state, 0);
+  }
+  void add_blend(float blend) {
+    fbb_.AddElement<float>(CarryMotion::VT_BLEND, blend, 0.0f);
+  }
+  void add_flags(int32_t flags) {
+    fbb_.AddElement<int32_t>(CarryMotion::VT_FLAGS, flags, 0);
+  }
+  explicit CarryMotionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CarryMotion> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CarryMotion>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CarryMotion> CreateCarryMotion(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    DynamiteMessage::CarryMotionTarget target = DynamiteMessage::CarryMotionTarget_carrier,
+    uint32_t object_id = 0,
+    uint32_t layer = 0,
+    uint64_t state = 0,
+    float blend = 0.0f,
+    int32_t flags = 0) {
+  CarryMotionBuilder builder_(_fbb);
+  builder_.add_state(state);
+  builder_.add_flags(flags);
+  builder_.add_blend(blend);
+  builder_.add_layer(layer);
+  builder_.add_object_id(object_id);
+  builder_.add_target(target);
+  return builder_.Finish();
+}
+
 inline bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Message type) {
   switch (type) {
     case Message_NONE: {
@@ -2001,6 +2139,10 @@ inline bool VerifyMessage(::flatbuffers::Verifier &verifier, const void *obj, Me
     }
     case Message_BodyPosition: {
       auto ptr = reinterpret_cast<const DynamiteMessage::BodyPosition *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Message_CarryMotion: {
+      auto ptr = reinterpret_cast<const DynamiteMessage::CarryMotion *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;

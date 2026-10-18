@@ -2,6 +2,7 @@
 
 #include "SoldierWarp.h"
 #include "DynamiteCore.h"
+#include "PlayerProbe.h"
 #include "DynamiteHook.h"
 #include "dynamite.h"
 #include "spdlog/spdlog.h"
@@ -29,6 +30,7 @@ namespace Dynamite::BodyFollow {
         double lastUpdate = 0;
         double lastTick = 0;
         double followStart = 0;
+        bool attached = false;
 
         double Now() {
             static LARGE_INTEGER freq{};
@@ -52,6 +54,7 @@ namespace Dynamite::BodyFollow {
             if (objectID == followID) {
                 spdlog::info("BodyFollow, partner dropped soldier {}", objectID);
                 followID = noBody;
+                attached = false;
             }
             return;
         }
@@ -79,6 +82,7 @@ namespace Dynamite::BodyFollow {
         if (now - lastUpdate > timeout) {
             spdlog::info("BodyFollow, no updates for soldier {}, stopped following", followID);
             followID = noBody;
+            attached = false;
             return;
         }
         if (!SoldierWarp::Capture(followID)) {
@@ -95,7 +99,7 @@ namespace Dynamite::BodyFollow {
             const auto dx = carrier.x - target[0], dz = carrier.z - target[2];
             if (dx * dx + dz * dz < maxCarrierDistance * maxCarrierDistance) {
                 aim[0] = carrier.x;
-                aim[1] = carrier.y + shoulderHeight;
+                aim[1] = carrier.y + (attached ? 0.0f : shoulderHeight);
                 aim[2] = carrier.z;
             }
         }
@@ -115,7 +119,12 @@ namespace Dynamite::BodyFollow {
             }
         }
 
-        if (SoldierWarp::Warp(followID, cur[0], cur[1], cur[2], false) < 0) {
+        alignas(16) float rot[4];
+        const bool haveRot = attached && PlayerProbe::PartnerRotation(rot);
+        if (attached) {
+            std::copy(std::begin(aim), std::end(aim), std::begin(cur)); // carried pose is relative to the carrier, no easing
+        }
+        if (SoldierWarp::Warp(followID, cur[0], cur[1], cur[2], false, haveRot ? rot : nullptr) < 0) {
             havePos = false; // recapture on next frame
         }
     }
@@ -124,7 +133,15 @@ namespace Dynamite::BodyFollow {
 
     double FollowedFor() { return followID == noBody ? 0.0 : Now() - followStart; }
 
+    void SetAttached(const bool a) {
+        if (a != attached) {
+            spdlog::info("BodyFollow, soldier {} {}", followID, a ? "attached to carrier" : "detached");
+        }
+        attached = a;
+    }
+
     void Reset() {
+        attached = false;
         followID = noBody;
         havePos = false;
     }

@@ -20,7 +20,10 @@ namespace Dynamite::SoldierWarp {
 
     // Move soldier. Returns 1 on success, 0 if controller is not captured yet (call Capture and retry),
     // -1 on failure (soldier not found or captured data does not match soldier).
-    int Warp(uint32_t objectID, float x, float y, float z, bool log = true);
+    int Warp(uint32_t objectID, float x, float y, float z, bool log = true, const float *rotation = nullptr);
+
+    // local index of a captured soldier (true if known)
+    bool LocalIndex(uint32_t objectID, uint32_t &index);
 }
 
 #endif // HOOK_SOLDIERWARP_H

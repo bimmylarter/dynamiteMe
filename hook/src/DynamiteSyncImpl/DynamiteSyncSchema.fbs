@@ -14,7 +14,8 @@ union Message {
    SendBossQuietSetNextActionTask,
    SendBossQuietSetActionTask,
    SendBossQuietDamage,
-   BodyPosition
+   BodyPosition,
+   CarryMotion
 }
 
 table MessageWrapper {
@@ -170,4 +171,20 @@ table BodyPosition {
     pos: Vec3;
     rot_y: float32;
     state: BodyState;
+}
+
+// Animation request made by the sender's carry code, replayed on the sender's character (and the body he carries)
+// in the receiver's game, where that character has no carry logic of its own.
+enum CarryMotionTarget:ubyte {
+    carrier,  // the sending player's character
+    body,     // the soldier the sending player carries
+}
+
+table CarryMotion {
+    target: CarryMotionTarget;
+    object_id: uint32;  // soldier id for target == body
+    layer: uint32;
+    state: uint64;      // motion state hash
+    blend: float32;
+    flags: int32;
 }
