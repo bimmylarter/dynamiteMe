@@ -9,6 +9,7 @@
 #include "windows.h"
 
 #include <atomic>
+#include <iterator>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -168,7 +169,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v15, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v16, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -390,6 +391,58 @@ namespace Dynamite::PlayerProbe {
             }
         }
 
+        // --- v16: play the local player's carry animation sequence on the partner's character ---
+        // Recorded on the carrier (player motion ctrl, vf170): pickup layer 0 904c34eb558a (or 4b4cd3a6e541, by body
+        // orientation) -> a0b4a45711dd -> 8f29c6f1b260 -> 455ceb089372, then carry layer 1 6ef53f69c57b; putdown layer 1 4766b491f767.
+        struct AnimStep {
+            double at;
+            uint32_t layer;
+            uint64_t state;
+            float blend;
+        };
+        constexpr AnimStep pickupSteps[] = {
+            {0.00, 0, 0x904c34eb558aull, 15.0f},
+            {0.05, 0, 0xa0b4a45711ddull, 10.0f},
+            {0.55, 0, 0x8f29c6f1b260ull, 0.0f},
+            {1.90, 0, 0x455ceb089372ull, 0.0f},
+            {3.35, 1, 0x6ef53f69c57bull, 10.0f},
+        };
+        constexpr AnimStep putdownStep = {0.0, 1, 0x4766b491f767ull, 0.0f};
+
+        uint32_t animBody = 0xffffffff;
+        double animStart = 0;
+        int animNext = 0;
+
+        void PlayOnPartner(const int remote, const AnimStep &step) {
+            const auto ctrl = motionCtrl[remote];
+            if (ctrl == nullptr) {
+                spdlog::info("[playerprobe] anim: no motion ctrl for partner {}, cannot play {:012x}", remote, step.state);
+                return;
+            }
+            const auto fn = reinterpret_cast<MotionFunc>((*(void ***)ctrl)[0x170 / 8]);
+            spdlog::info("[playerprobe] anim: partner {} layer {} state {:012x} blend {}", remote, step.layer, step.state, step.blend);
+            fn(ctrl, static_cast<uint32_t>(remote), step.layer, step.state, step.blend, 0);
+        }
+
+        void UpdatePartnerAnim(const int remote, const double now) {
+            const auto followed = BodyFollow::FollowedID();
+            if (followed != animBody) {
+                if (animBody != 0xffffffff) {
+                    PlayOnPartner(remote, putdownStep);
+                }
+                animBody = followed;
+                animStart = now;
+                animNext = 0;
+            }
+            if (animBody == 0xffffffff) {
+                return;
+            }
+            while (animNext < static_cast<int>(std::size(pickupSteps)) && now - animStart >= pickupSteps[animNext].at) {
+                PlayOnPartner(remote, pickupSteps[animNext]);
+                animNext++;
+            }
+        }
+
         void DumpWriters() {
             const auto n = std::min(writerCount.load(), maxWriters);
             spdlog::info("[playerprobe] remote player record writers: {}", n);
@@ -436,6 +489,7 @@ namespace Dynamite::PlayerProbe {
 
         InstallInfoHook();
         FindMotionControllers();
+        UpdatePartnerAnim(remote, now);
 
         // log every motion call for a few seconds after a carry starts (local or partner)
         {
