@@ -14,6 +14,9 @@
 
 #include <atomic>
 #include <iterator>
+#include <array>
+#include <intrin.h>
+#include <utility>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -173,7 +176,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v19, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v20, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -477,6 +480,9 @@ namespace Dynamite::PlayerProbe {
                 }
                 return;
             }
+            if (m.objectID == localCarryTarget.load()) {
+                return; // we carry it here, our own game animates it
+            }
             uint32_t index = 0;
             if (!SoldierWarp::LocalIndex(m.objectID, index)) {
                 SoldierWarp::Capture(m.objectID);
@@ -550,6 +556,84 @@ namespace Dynamite::PlayerProbe {
             g_hook->dynamiteSyncImpl.SendCarryOffset(target, off, rel);
         }
 
+        // --- v20: which other controller methods animate the carried soldier during a pickup ---
+        // Lightweight hooks on controller methods next to vf170; they only record (no calls before forwarding, so
+        // float arguments in xmm registers and return values pass through untouched).
+        constexpr int slotList[] = {0x160, 0x168, 0x178, 0x180, 0x188, 0x190, 0x198, 0x1a0, 0x1a8};
+        constexpr int slotCount = static_cast<int>(std::size(slotList));
+        using AnyFunc = uint64_t(__fastcall *)(void *, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
+        AnyFunc slotOriginal[slotCount]{};
+        uint64_t slotTarget[slotCount]{};
+        struct SlotCall {
+            uint64_t tick, ctrl, rdx, r8, r9, a5, a6, ret;
+            uint32_t xmm1, xmm2, xmm3;
+            int slot;
+        };
+        constexpr int maxSlotCalls = 256;
+        SlotCall slotCalls[maxSlotCalls];
+        std::atomic<int> slotCallCount{0};
+        std::atomic<uint64_t> watchCtrl{0};
+
+        template <int N>
+        uint64_t __fastcall hkSlot(void *ctrl, uint64_t rdx, uint64_t r8, uint64_t r9, uint64_t a5, uint64_t a6, uint64_t a7, uint64_t a8) {
+            uint32_t x1, x2, x3;
+            asm volatile("movd %%xmm1, %0\n\tmovd %%xmm2, %1\n\tmovd %%xmm3, %2" : "=r"(x1), "=r"(x2), "=r"(x3));
+            if (reinterpret_cast<uint64_t>(ctrl) == watchCtrl.load(std::memory_order_relaxed)) {
+                const auto i = slotCallCount.fetch_add(1, std::memory_order_relaxed);
+                if (i < maxSlotCalls) {
+                    slotCalls[i] = {__rdtsc(), reinterpret_cast<uint64_t>(ctrl), rdx, r8, r9, a5, a6, // no calls here: xmm args must survive
+                        reinterpret_cast<uint64_t>(__builtin_return_address(0)), x1, x2, x3, slotList[N]};
+                }
+            }
+            return slotOriginal[N](ctrl, rdx, r8, r9, a5, a6, a7, a8);
+        }
+
+        template <int... I>
+        constexpr std::array<void *, sizeof...(I)> SlotHooks(std::integer_sequence<int, I...>) {
+            return {reinterpret_cast<void *>(&hkSlot<I>)...};
+        }
+        const auto slotHooks = SlotHooks(std::make_integer_sequence<int, slotCount>{});
+
+        void InstallSlotHooks(void *ctrl) {
+            static bool done = false;
+            if (done || ctrl == nullptr) {
+                return;
+            }
+            done = true;
+            const auto vt = *(uint64_t **)ctrl;
+            for (int i = 0; i < slotCount; i++) {
+                const auto fn = vt[slotList[i] / 8];
+                bool dup = false;
+                for (int j = 0; j < i; j++) {
+                    dup |= slotTarget[j] == fn;
+                }
+                if (dup || !InExe(fn)) {
+                    continue;
+                }
+                if (MH_CreateHook(reinterpret_cast<void *>(fn), slotHooks[i], reinterpret_cast<void **>(&slotOriginal[i])) == MH_OK &&
+                    MH_EnableHook(reinterpret_cast<void *>(fn)) == MH_OK) {
+                    slotTarget[i] = fn;
+                    spdlog::info("[playerprobe] controller method {:#x} ({:#x}) hooked", slotList[i], ToExe(fn));
+                } else {
+                    spdlog::info("[playerprobe] cannot hook controller method {:#x} ({:#x})", slotList[i], ToExe(fn));
+                }
+            }
+        }
+
+        void DumpSlotCalls() {
+            const auto n = std::min(slotCallCount.load(), maxSlotCalls);
+            for (int i = 0; i < n; i++) {
+                const auto &c = slotCalls[i];
+                float f1, f2, f3;
+                memcpy(&f1, &c.xmm1, 4);
+                memcpy(&f2, &c.xmm2, 4);
+                memcpy(&f3, &c.xmm3, 4);
+                spdlog::info("[playerprobe] soldier ctrl call vf{:#x} tsc {} rdx {:#x} r8 {:#x} r9 {:#x} a5 {:#x} a6 {:#x} xmm1-3 {} {} {} from {:#x}",
+                    c.slot, c.tick, c.rdx, c.r8, c.r9, c.a5, c.a6, f1, f2, f3, ToExe(c.ret));
+            }
+            slotCallCount = 0;
+        }
+
         void DumpWriters() {
             const auto n = std::min(writerCount.load(), maxWriters);
             spdlog::info("[playerprobe] remote player record writers: {}", n);
@@ -603,6 +687,17 @@ namespace Dynamite::PlayerProbe {
             if (target == 0xffff && localCarryTarget.load() != 0xffff) {
                 forwardUntil = GetTickCount64() + 4000;
             }
+            {
+                // dump the soldier's other controller calls once the put-down is over
+                static bool dumpPending = false;
+                if (target != 0xffff) {
+                    dumpPending = true;
+                } else if (dumpPending && GetTickCount64() > forwardUntil.load()) {
+                    dumpPending = false;
+                    DumpSlotCalls();
+                    watchCtrl = 0;
+                }
+            }
             if (target != 0xffff && target != localCarryTarget.load()) {
                 carryStartTick = GetTickCount64();
                 carriedCtrl = 0;
@@ -628,6 +723,8 @@ namespace Dynamite::PlayerProbe {
                         }
                     }
                     recent.clear();
+                    InstallSlotHooks(reinterpret_cast<void *>(carriedCtrl.load()));
+                    watchCtrl = carriedCtrl.load();
                     spdlog::info("[playerprobe] carrying soldier {} (index {}, ctrl {:#x}), {} earlier requests sent", target, index, carriedCtrl.load(), sent);
                 } else {
                     SoldierWarp::Capture(target);
@@ -750,4 +847,6 @@ namespace Dynamite::PlayerProbe {
         QuatMul(cr, rel, rot);
         return true;
     }
+
+    uint32_t LocalCarryTarget() { return localCarryTarget.load(); }
 }

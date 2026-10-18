@@ -80,6 +80,12 @@ namespace Dynamite::BodyFollow {
         if (followID == noBody) {
             return;
         }
+        if (PlayerProbe::LocalCarryTarget() == followID) {
+            spdlog::info("BodyFollow, soldier {} picked up here, stopped following partner", followID);
+            followID = noBody;
+            attached = false;
+            return;
+        }
         if (now - lastUpdate > timeout) {
             spdlog::info("BodyFollow, no updates for soldier {}, stopped following", followID);
             followID = noBody;
@@ -146,7 +152,7 @@ namespace Dynamite::BodyFollow {
     double FollowedFor() { return followID == noBody ? 0.0 : Now() - followStart; }
 
     void PlaceAttached() {
-        if (followID == noBody || !attached) {
+        if (followID == noBody || !attached || PlayerProbe::LocalCarryTarget() == followID) {
             return;
         }
         alignas(16) float rot[4];

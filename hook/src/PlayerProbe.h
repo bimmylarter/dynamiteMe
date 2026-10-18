@@ -15,6 +15,9 @@ namespace Dynamite::PlayerProbe {
 
     // where the soldier partner carries should be, from partner's last carry offset (false if unknown)
     bool CarriedPlacement(uint32_t objectID, float pos[3], float rot[4]);
+
+    // soldier the local player carries (0xffff if none)
+    uint32_t LocalCarryTarget();
 }
 
 #endif // HOOK_PLAYERPROBE_H
