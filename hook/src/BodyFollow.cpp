@@ -159,6 +159,11 @@ namespace Dynamite::BodyFollow {
         float placed[3];
         bool haveRot = PlayerProbe::CarriedPlacement(followID, placed, rot);
         if (!haveRot) {
+            static double nextLog = 0;
+            if (Now() > nextLog) {
+                nextLog = Now() + 1.0;
+                spdlog::info("BodyFollow, no carry offset from partner for soldier {}, holding it at partner's feet", followID);
+            }
             auto carrier = DynamiteCore::GetPlayerPosition(g_hook->cfg.Host ? 1 : 0);
             if (!carrier.Valid()) {
                 return;

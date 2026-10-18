@@ -2014,7 +2014,8 @@ struct CarryMotion FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_LAYER = 8,
     VT_STATE = 10,
     VT_BLEND = 12,
-    VT_FLAGS = 14
+    VT_FLAGS = 14,
+    VT_METHOD = 16
   };
   DynamiteMessage::CarryMotionTarget target() const {
     return static_cast<DynamiteMessage::CarryMotionTarget>(GetField<uint8_t>(VT_TARGET, 0));
@@ -2034,6 +2035,9 @@ struct CarryMotion FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   int32_t flags() const {
     return GetField<int32_t>(VT_FLAGS, 0);
   }
+  uint16_t method() const {
+    return GetField<uint16_t>(VT_METHOD, 368);
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint8_t>(verifier, VT_TARGET, 1) &&
@@ -2042,6 +2046,7 @@ struct CarryMotion FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint64_t>(verifier, VT_STATE, 8) &&
            VerifyField<float>(verifier, VT_BLEND, 4) &&
            VerifyField<int32_t>(verifier, VT_FLAGS, 4) &&
+           VerifyField<uint16_t>(verifier, VT_METHOD, 2) &&
            verifier.EndTable();
   }
 };
@@ -2068,6 +2073,9 @@ struct CarryMotionBuilder {
   void add_flags(int32_t flags) {
     fbb_.AddElement<int32_t>(CarryMotion::VT_FLAGS, flags, 0);
   }
+  void add_method(uint16_t method) {
+    fbb_.AddElement<uint16_t>(CarryMotion::VT_METHOD, method, 368);
+  }
   explicit CarryMotionBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2086,13 +2094,15 @@ inline ::flatbuffers::Offset<CarryMotion> CreateCarryMotion(
     uint32_t layer = 0,
     uint64_t state = 0,
     float blend = 0.0f,
-    int32_t flags = 0) {
+    int32_t flags = 0,
+    uint16_t method = 368) {
   CarryMotionBuilder builder_(_fbb);
   builder_.add_state(state);
   builder_.add_flags(flags);
   builder_.add_blend(blend);
   builder_.add_layer(layer);
   builder_.add_object_id(object_id);
+  builder_.add_method(method);
   builder_.add_target(target);
   return builder_.Finish();
 }

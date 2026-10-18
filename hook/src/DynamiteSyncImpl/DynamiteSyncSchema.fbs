@@ -188,6 +188,7 @@ table CarryMotion {
     state: uint64;      // motion state hash
     blend: float32;
     flags: int32;
+    method: uint16 = 368;  // controller vtable offset of the request (0x170)
 }
 
 // Where the carried soldier is relative to the carrier (carrier local frame), sent while carrying.

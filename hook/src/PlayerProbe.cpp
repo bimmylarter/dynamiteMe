@@ -176,7 +176,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v20, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v21, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -258,7 +258,9 @@ namespace Dynamite::PlayerProbe {
         struct MotionHook {
             uint64_t target;
             MotionFunc original;
+            uint16_t method; // vtable offset: 0x170 change state, 0x160 / 0x190 used for the soldier's pickup and put-down
         };
+        constexpr uint16_t motionMethods[] = {0x170, 0x160, 0x190};
         MotionHook motionHooks[maxMotionHooks]{};
         int motionHookCount = 0;
         void *motionCtrl[2] = {nullptr, nullptr};
@@ -333,25 +335,25 @@ namespace Dynamite::PlayerProbe {
                 const int local = g_hook->cfg.Host ? 0 : 1;
                 if (ctrl == motionCtrl[local] && player == static_cast<uint32_t>(local) && ret >= carryCodeStart && ret < carryCodeEnd) {
                     std::lock_guard lock(outMutex);
-                    outgoing.push_back({.body = false, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags});
+                    outgoing.push_back({.body = false, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags, .method = motionHooks[N].method});
                 } else if (reinterpret_cast<uint64_t>(ctrl) == carriedCtrl.load() && player == carriedIndex.load() &&
                            (localCarryTarget.load() != 0xffff || GetTickCount64() < forwardUntil.load())) {
                     // everything the carried soldier plays while picked up, carried and put down
                     std::lock_guard lock(outMutex);
-                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
+                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags, .method = motionHooks[N].method});
                 } else if (ret >= carriedAiStart && ret < carriedAiEnd && localCarryTarget.load() != 0xffff) {
                     carriedCtrl = reinterpret_cast<uint64_t>(ctrl);
                     carriedIndex = player;
                     carriedID = localCarryTarget.load();
                     std::lock_guard lock(outMutex);
-                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags});
+                    outgoing.push_back({.body = true, .objectID = carriedID.load(), .layer = layer, .state = state, .blend = blend, .flags = flags, .method = motionHooks[N].method});
                 } else if (ctrl != motionCtrl[0] && ctrl != motionCtrl[1]) {
                     std::lock_guard lock(outMutex);
                     if (recent.size() >= maxRecent) {
                         recent.erase(recent.begin());
                     }
                     recent.push_back({GetTickCount64(), reinterpret_cast<uint64_t>(ctrl), player,
-                        {.body = true, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags}});
+                        {.body = true, .objectID = 0, .layer = layer, .state = state, .blend = blend, .flags = flags, .method = motionHooks[N].method}});
                 }
                 if (ctrl != motionCtrl[0] && ctrl != motionCtrl[1] && player < maxSoldierSlots) {
                     soldierCtrlByIndex[player] = reinterpret_cast<uint64_t>(ctrl);
@@ -370,21 +372,25 @@ namespace Dynamite::PlayerProbe {
             }
             motionCtrl[p] = ctrl;
             const auto vt = *(uint64_t **)ctrl;
-            const auto fn = vt[0x170 / 8];
-            spdlog::info("[playerprobe] player {} motion ctrl {} ({}) vtable {:#x} vf170 {:#x}", p, ctrl, how, ToExe(reinterpret_cast<uint64_t>(vt)), ToExe(fn));
-            bool hooked = false;
-            for (int h = 0; h < motionHookCount; h++) {
-                hooked |= motionHooks[h].target == fn;
-            }
-            if (!hooked && motionHookCount < maxMotionHooks && InExe(fn)) {
+            spdlog::info("[playerprobe] player {} motion ctrl {} ({}) vtable {:#x} vf170 {:#x}", p, ctrl, how, ToExe(reinterpret_cast<uint64_t>(vt)), ToExe(vt[0x170 / 8]));
+            for (const auto method : motionMethods) {
+                const auto fn = vt[method / 8];
+                bool hooked = false;
+                for (int h = 0; h < motionHookCount; h++) {
+                    hooked |= motionHooks[h].target == fn;
+                }
+                if (hooked || motionHookCount >= maxMotionHooks || !InExe(fn)) {
+                    continue;
+                }
                 const auto h = motionHookCount;
                 motionHooks[h].target = fn;
+                motionHooks[h].method = method;
                 if (MH_CreateHook(reinterpret_cast<void *>(fn), hookFuncs[h], reinterpret_cast<void **>(&motionHooks[h].original)) == MH_OK &&
                     MH_EnableHook(reinterpret_cast<void *>(fn)) == MH_OK) {
                     motionHookCount++;
-                    spdlog::info("[playerprobe] motion function {:#x} hooked as motion{}", ToExe(fn), h);
+                    spdlog::info("[playerprobe] motion method {:#x} ({:#x}) hooked as motion{}", method, ToExe(fn), h);
                 } else {
-                    spdlog::info("[playerprobe] cannot hook motion function {:#x}", ToExe(fn));
+                    spdlog::info("[playerprobe] cannot hook motion method {:#x} ({:#x})", method, ToExe(fn));
                 }
             }
         }
@@ -460,9 +466,14 @@ namespace Dynamite::PlayerProbe {
         }
 
         void Replay(void *ctrl, const uint32_t index, const CarryMotionUpdate &m) {
-            const auto fn = reinterpret_cast<MotionFunc>((*(void ***)ctrl)[0x170 / 8]);
-            if (motionHookCount == 0 || reinterpret_cast<uint64_t>(fn) != motionHooks[0].target) {
-                spdlog::info("[playerprobe] replay: ctrl {} is not a motion controller, skipped", ctrl);
+            const auto method = m.method == 0 ? 0x170 : m.method;
+            const auto fn = reinterpret_cast<MotionFunc>((*(void ***)ctrl)[method / 8]);
+            bool known = false;
+            for (int h = 0; h < motionHookCount; h++) {
+                known |= motionHooks[h].target == reinterpret_cast<uint64_t>(fn) && motionHooks[h].method == method;
+            }
+            if (!known) {
+                spdlog::info("[playerprobe] replay: ctrl {} method {:#x} is not a known motion method, skipped", ctrl, method);
                 return;
             }
             replaying = true;
@@ -473,7 +484,7 @@ namespace Dynamite::PlayerProbe {
         void ApplyCarryMotion(const int remote, const CarryMotionUpdate &m) {
             if (!m.body) {
                 const auto ctrl = motionCtrl[remote];
-                spdlog::info("[playerprobe] replay: partner {} layer {} state {:012x} blend {} flags {:#x}{}", remote, m.layer, m.state, m.blend, m.flags,
+                spdlog::info("[playerprobe] replay: partner {} vf{:#x} layer {} state {:012x} blend {} flags {:#x}{}", remote, m.method, m.layer, m.state, m.blend, m.flags,
                     ctrl ? "" : " (no ctrl)");
                 if (ctrl) {
                     Replay(ctrl, static_cast<uint32_t>(remote), m);
@@ -490,7 +501,7 @@ namespace Dynamite::PlayerProbe {
                 return;
             }
             const auto ctrl = reinterpret_cast<void *>(SoldierWarp::Controller(m.objectID));
-            spdlog::info("[playerprobe] replay: soldier {} (index {}, ctrl {}) layer {} state {:012x} blend {} flags {:#x}", m.objectID, index, ctrl, m.layer, m.state,
+            spdlog::info("[playerprobe] replay: soldier {} (index {}, ctrl {}) vf{:#x} layer {} state {:012x} blend {} flags {:#x}", m.objectID, index, ctrl, m.method, m.layer, m.state,
                 m.blend, m.flags);
             if (ctrl) {
                 Replay(ctrl, index, m);
@@ -695,10 +706,13 @@ namespace Dynamite::PlayerProbe {
                 } else if (dumpPending && GetTickCount64() > forwardUntil.load()) {
                     dumpPending = false;
                     DumpSlotCalls();
-                    watchCtrl = 0;
                 }
             }
+            if (target == 0xffff && carriedID.load() != 0xffff && BodyFollow::FollowedID() == carriedID.load()) {
+                forwardUntil = 0; // partner picked up the soldier we just put down
+            }
             if (target != 0xffff && target != localCarryTarget.load()) {
+                forwardUntil = 0;
                 carryStartTick = GetTickCount64();
                 carriedCtrl = 0;
                 carriedIndex = 0xffffffff;
@@ -723,8 +737,6 @@ namespace Dynamite::PlayerProbe {
                         }
                     }
                     recent.clear();
-                    InstallSlotHooks(reinterpret_cast<void *>(carriedCtrl.load()));
-                    watchCtrl = carriedCtrl.load();
                     spdlog::info("[playerprobe] carrying soldier {} (index {}, ctrl {:#x}), {} earlier requests sent", target, index, carriedCtrl.load(), sent);
                 } else {
                     SoldierWarp::Capture(target);

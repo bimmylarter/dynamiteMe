@@ -37,6 +37,7 @@ namespace Dynamite {
         uint64_t state;
         float blend;
         int32_t flags;
+        uint16_t method = 0x170; // controller vtable offset used for the request
     };
 
     class DynamiteSyncImpl {
