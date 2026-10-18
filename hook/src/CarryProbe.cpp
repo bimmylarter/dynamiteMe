@@ -646,6 +646,8 @@ namespace Dynamite::CarryProbe {
         return 1;
     }
 
+    uint64_t Component() { return carryComponent.load(); }
+
     void LogInfo() {
         const auto comp = reinterpret_cast<char *>(carryComponent.load());
         if (comp == nullptr) {

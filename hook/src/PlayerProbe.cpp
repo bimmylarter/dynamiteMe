@@ -1,6 +1,7 @@
 #include "PlayerProbe.h"
 
 #include "BodyFollow.h"
+#include "CarryProbe.h"
 #include "DynamiteHook.h"
 #include "MinHook.h"
 #include "dynamite.h"
@@ -294,61 +295,97 @@ namespace Dynamite::PlayerProbe {
             reinterpret_cast<void *>(&hkMotion<0>), reinterpret_cast<void *>(&hkMotion<1>),
             reinterpret_cast<void *>(&hkMotion<2>), reinterpret_cast<void *>(&hkMotion<3>)};
 
+        void HookMotion(const int p, void *ctrl, const char *how) {
+            if (ctrl == nullptr || ctrl == motionCtrl[p]) {
+                return;
+            }
+            motionCtrl[p] = ctrl;
+            const auto vt = *(uint64_t **)ctrl;
+            const auto fn = vt[0x170 / 8];
+            spdlog::info("[playerprobe] player {} motion ctrl {} ({}) vtable {:#x} vf170 {:#x}", p, ctrl, how, ToExe(reinterpret_cast<uint64_t>(vt)), ToExe(fn));
+            bool hooked = false;
+            for (int h = 0; h < motionHookCount; h++) {
+                hooked |= motionHooks[h].target == fn;
+            }
+            if (!hooked && motionHookCount < maxMotionHooks && InExe(fn)) {
+                const auto h = motionHookCount;
+                motionHooks[h].target = fn;
+                if (MH_CreateHook(reinterpret_cast<void *>(fn), hookFuncs[h], reinterpret_cast<void **>(&motionHooks[h].original)) == MH_OK &&
+                    MH_EnableHook(reinterpret_cast<void *>(fn)) == MH_OK) {
+                    motionHookCount++;
+                    spdlog::info("[playerprobe] motion function {:#x} hooked as motion{}", ToExe(fn), h);
+                } else {
+                    spdlog::info("[playerprobe] cannot hook motion function {:#x}", ToExe(fn));
+                }
+            }
+        }
+
+        bool Ptr(const void *p) { return p != nullptr && (reinterpret_cast<uint64_t>(p) & 7) == 0 && reinterpret_cast<uint64_t>(p) > 0x10000; }
+
         void FindMotionControllers() {
+            static double nextDiag = 0;
+            const auto now = Now();
+            const bool diag = now >= nextDiag;
+            if (diag) {
+                nextDiag = now + 15.0;
+            }
+
+            // route 1: local player through the carry component (known after a local carry event)
+            const auto comp = reinterpret_cast<char *>(CarryProbe::Component());
+            if (comp != nullptr) {
+                const auto ctx = *(char **)(comp + 8);
+                const auto tbl = Ptr(ctx) ? *(char **)(ctx + 0x78) : nullptr;
+                const auto ctrl = Ptr(tbl) ? *(void **)(tbl + 0x238) : nullptr;
+                if (Ptr(ctrl)) {
+                    HookMotion(g_hook->cfg.Host ? 0 : 1, ctrl, "carry component");
+                }
+            }
+
+            // route 2: every player through the info updater's player systems
             const auto u = reinterpret_cast<char *>(infoUpdater.load());
             if (u == nullptr) {
                 return;
             }
             const auto net = *(char **)(u + 0x50);
-            if (net == nullptr) {
+            if (!Ptr(net)) {
+                if (diag) {
+                    spdlog::info("[playerprobe] diag: updater {} net {}", (void *)u, (void *)net);
+                }
                 return;
             }
-            const auto sysIndex = *(uint8_t **)(net + 0x78);
             const auto systems = *(char ***)(net + 0x50);
-            if (sysIndex == nullptr || systems == nullptr) {
+            const auto playerObj = *(uint16_t **)(net + 0x70);
+            const auto sysIndex = *(uint8_t **)(net + 0x78);
+            if (diag) {
+                spdlog::info("[playerprobe] diag: updater {} net {} systems {} playerObj {} sysIndex {} count {}",
+                    (void *)u, (void *)net, (void *)systems, (void *)playerObj, (void *)sysIndex, *(uint32_t *)(u + 0x90));
+                if (Ptr(playerObj)) {
+                    spdlog::info("[playerprobe] diag: player objects {:#x} {:#x}", playerObj[0], playerObj[1]);
+                }
+            }
+            if (!Ptr(systems) || sysIndex == nullptr || playerObj == nullptr) {
                 return;
             }
             for (int p = 0; p < 2; p++) {
-                const auto si = sysIndex[p];
-                static uint8_t loggedIndex[2] = {0xfe, 0xfe};
+                // the updater uses the system map only when the player has an object (0xffff = none)
+                const auto si = playerObj[p] == 0xffff ? 0xff : sysIndex[p];
+                static int loggedIndex[2] = {-1, -1};
                 if (loggedIndex[p] != si) {
                     loggedIndex[p] = si;
-                    spdlog::info("[playerprobe] player {} belongs to player system #{}", p, si);
+                    spdlog::info("[playerprobe] player {} object {:#x} player system #{}", p, playerObj[p], si);
                 }
                 if (si == 0xff) {
                     continue;
                 }
                 const auto sys = systems[si];
-                if (sys == nullptr) {
-                    continue;
+                const auto tbl = Ptr(sys) ? *(char **)(sys + 0x78) : nullptr;
+                const auto ctrl = Ptr(tbl) ? *(void **)(tbl + 0x238) : nullptr;
+                if (diag) {
+                    spdlog::info("[playerprobe] diag: player {} system {} table {} ctrl {} table base {}", p, (void *)sys, (void *)tbl, ctrl,
+                        Ptr(tbl) ? *(uint32_t *)(tbl + 8) : 0xffffffff);
                 }
-                const auto tbl = *(char **)(sys + 0x78);
-                if (tbl == nullptr) {
-                    continue;
-                }
-                const auto ctrl = *(void **)(tbl + 0x238);
-                if (ctrl == nullptr || ctrl == motionCtrl[p]) {
-                    continue;
-                }
-                motionCtrl[p] = ctrl;
-                const auto vt = *(uint64_t **)ctrl;
-                const auto fn = vt[0x170 / 8];
-                spdlog::info("[playerprobe] player {} system #{} {} table {} motion ctrl {} vtable {:#x} vf170 {:#x} table base player {}",
-                    p, si, (void *)sys, (void *)tbl, ctrl, ToExe(reinterpret_cast<uint64_t>(vt)), ToExe(fn), *(uint32_t *)(tbl + 8));
-                bool hooked = false;
-                for (int h = 0; h < motionHookCount; h++) {
-                    hooked |= motionHooks[h].target == fn;
-                }
-                if (!hooked && motionHookCount < maxMotionHooks && InExe(fn)) {
-                    const auto h = motionHookCount;
-                    motionHooks[h].target = fn;
-                    if (MH_CreateHook(reinterpret_cast<void *>(fn), hookFuncs[h], reinterpret_cast<void **>(&motionHooks[h].original)) == MH_OK &&
-                        MH_EnableHook(reinterpret_cast<void *>(fn)) == MH_OK) {
-                        motionHookCount++;
-                        spdlog::info("[playerprobe] motion function {:#x} hooked as motion{}", ToExe(fn), h);
-                    } else {
-                        spdlog::info("[playerprobe] cannot hook motion function {:#x}", ToExe(fn));
-                    }
+                if (Ptr(ctrl)) {
+                    HookMotion(p, ctrl, "player system");
                 }
             }
         }
