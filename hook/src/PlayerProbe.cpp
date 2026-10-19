@@ -180,7 +180,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v24, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v25, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -330,11 +330,23 @@ namespace Dynamite::PlayerProbe {
         // watcher side: soldier motion ctrl by soldier local index, learned from soldier motion requests
         constexpr int maxSoldierSlots = 64;
         std::atomic<uint64_t> soldierCtrlByIndex[maxSoldierSlots]{};
+        // v25: soldier carried by the partner (watcher side). Its own AI here does not know it is carried and keeps
+        // switching it back to lying / getting-up animations, overriding the replayed carry pose: those are dropped.
+        std::atomic<uint64_t> heldCtrl{0};
+        std::atomic<uint32_t> heldIndex{0xffffffff};
+        std::atomic<uint32_t> heldID{0xffff};
+        std::atomic<int> suppressLogBudget{0};
 
         template <int N>
         uint64_t __fastcall hkMotion(void *ctrl, uint32_t player, uint32_t layer, uint64_t state, float blend, int32_t flags) {
             const auto ret = ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0)));
             LogMotion(N, ctrl, player, layer, state, blend, flags, ret);
+            if (!replaying.load() && heldCtrl.load() != 0 && reinterpret_cast<uint64_t>(ctrl) == heldCtrl.load() && player == heldIndex.load() && layer == 0) {
+                if (suppressLogBudget.load() > 0 && suppressLogBudget.fetch_sub(1) > 0) {
+                    spdlog::info("[playerprobe] soldier {} is carried by partner, local state {:012x} from {:#x} dropped", heldID.load(), state & 0xffffffffffffull, ret);
+                }
+                return 1;
+            }
             if (!replaying.load()) {
                 const int local = g_hook->cfg.Host ? 0 : 1;
                 if (ctrl == motionCtrl[local] && player == static_cast<uint32_t>(local) && ret >= carryCodeStart && ret < carryCodeEnd) {
@@ -546,6 +558,12 @@ namespace Dynamite::PlayerProbe {
             if (ctrl) {
                 Replay(ctrl, index, m);
                 BodyFollow::SetAttached(true);
+                if (heldID.load() != m.objectID) {
+                    suppressLogBudget = 20;
+                }
+                heldCtrl = reinterpret_cast<uint64_t>(ctrl);
+                heldIndex = index;
+                heldID = m.objectID;
             }
         }
 
@@ -839,6 +857,12 @@ namespace Dynamite::PlayerProbe {
             }
         }
         FlushPendingBody(remote);
+        if (heldID.load() != 0xffff && (!BodyFollow::Handles(heldID.load()) || localCarryTarget.load() == heldID.load())) {
+            spdlog::info("[playerprobe] soldier {} no longer carried by partner, its own animations resume", heldID.load());
+            heldCtrl = 0;
+            heldIndex = 0xffffffff;
+            heldID = 0xffff;
+        }
         while (const auto m = g_hook->dynamiteSyncImpl.PopCarryMotion()) {
             // keep order: while earlier requests for this soldier wait for the capture, queue later ones behind them
             bool queued = false;
@@ -971,6 +995,24 @@ namespace Dynamite::PlayerProbe {
         memcpy(rel, sRel, sizeof(sRel));
         if (!RecordTransform(g_hook->cfg.Host ? 1 : 0, cp, cr)) {
             return false;
+        }
+        // v25: carrier crouching. The carried soldier's root does not follow the carrier's crouch on the carrier's
+        // side (its pose is lowered by the carrier's skeleton), so lower it here by hand, eased in and out.
+        {
+            static float crouch = 0.0f;
+            static double last = 0;
+            const auto now = Now();
+            const auto dt = static_cast<float>(std::min(0.1, std::max(0.0, now - last)));
+            last = now;
+            bool crouched = false;
+            if (auto st = StateArrays()) {
+                crouched = (*(uint8_t **)(st + 0x30))[g_hook->cfg.Host ? 1 : 0] == 2;
+            }
+            crouch += ((crouched ? 1.0f : 0.0f) - crouch) * std::min(1.0f, dt * 6.0f);
+            constexpr float standingY = 0.74f, crouchDrop = 0.45f;
+            if (crouch > 0.001f) {
+                off[1] += (std::min(off[1], standingY) - crouchDrop - off[1]) * crouch;
+            }
         }
         float w[3];
         QuatRotate(cr, off, w);
