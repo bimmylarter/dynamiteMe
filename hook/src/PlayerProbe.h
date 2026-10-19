@@ -18,6 +18,9 @@ namespace Dynamite::PlayerProbe {
 
     // soldier the local player carries (0xffff if none)
     uint32_t LocalCarryTarget();
+
+    // partner still sends carry offsets for this soldier
+    bool HasCarryOffset(uint32_t objectID);
 }
 
 #endif // HOOK_PLAYERPROBE_H

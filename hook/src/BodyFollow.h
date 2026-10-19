@@ -25,6 +25,9 @@ namespace Dynamite::BodyFollow {
     // place an attached body at the carrier, call right after players are updated (every frame)
     void PlaceAttached();
 
+    // true while the body is placed from the partner's carry (other moves of it must wait)
+    bool Handles(uint32_t objectID);
+
     // forget followed body (session end)
     void Reset();
 }

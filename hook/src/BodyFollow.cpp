@@ -31,6 +31,7 @@ namespace Dynamite::BodyFollow {
         double lastTick = 0;
         double followStart = 0;
         bool attached = false;
+        bool releasing = false; // partner dropped it: keep placing it from partner's offsets until they stop
 
         double Now() {
             static LARGE_INTEGER freq{};
@@ -52,17 +53,23 @@ namespace Dynamite::BodyFollow {
 
         if (dropped) {
             if (objectID == followID) {
-                spdlog::info("BodyFollow, partner dropped soldier {}", objectID);
-                followID = noBody;
-                attached = false;
+                if (attached) {
+                    // the put-down is still playing on partner's side, the body keeps following his offsets
+                    spdlog::info("BodyFollow, partner dropped soldier {}, following the put-down", objectID);
+                    releasing = true;
+                } else {
+                    spdlog::info("BodyFollow, partner dropped soldier {}", objectID);
+                    followID = noBody;
+                }
             }
             return;
         }
 
-        if (objectID != followID) {
+        if (objectID != followID || releasing) {
             spdlog::info("BodyFollow, following soldier {} carried by partner", objectID);
             followID = objectID;
             attached = false;
+            releasing = false;
             followStart = Now();
             havePos = false;
         }
@@ -84,6 +91,15 @@ namespace Dynamite::BodyFollow {
             spdlog::info("BodyFollow, soldier {} picked up here, stopped following partner", followID);
             followID = noBody;
             attached = false;
+            return;
+        }
+        if (releasing) {
+            if (!PlayerProbe::HasCarryOffset(followID)) {
+                spdlog::info("BodyFollow, soldier {} put down, released", followID);
+                followID = noBody;
+                attached = false;
+                releasing = false;
+            }
             return;
         }
         if (now - lastUpdate > timeout) {
@@ -186,6 +202,8 @@ namespace Dynamite::BodyFollow {
         }
         SoldierWarp::Warp(followID, placed[0], placed[1], placed[2], false, haveRot ? rot : nullptr);
     }
+
+    bool Handles(const uint32_t objectID) { return followID != noBody && followID == objectID && attached; }
 
     void SetAttached(const bool a) {
         if (followID == noBody) {

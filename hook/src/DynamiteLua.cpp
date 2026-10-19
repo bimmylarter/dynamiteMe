@@ -472,6 +472,11 @@ namespace Dynamite {
     // Dynamite.WarpSoldier(gameObjectId, x, y, z) -> 1 moved, 0 not captured yet, -1 failed
     int l_WarpSoldier(lua_State *L) {
         const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        if (BodyFollow::Handles(objectID)) {
+            // body follows partner's carry / put-down exactly, the drop position is not needed
+            lua_pushinteger(L, 1);
+            return 1;
+        }
         const auto res = SoldierWarp::Warp(objectID,
             static_cast<float>(luaL_checknumber(L, 2)),
             static_cast<float>(luaL_checknumber(L, 3)),

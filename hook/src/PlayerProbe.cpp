@@ -6,7 +6,9 @@
 #include "CarryProbe.h"
 #include "SoldierWarp.h"
 #include "DynamiteSyncImpl/DynamiteSyncImpl.h"
+#include <map>
 #include <mutex>
+#include <cmath>
 #include <vector>
 #include "DynamiteHook.h"
 #include "MinHook.h"
@@ -178,7 +180,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v23, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v24, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -818,6 +820,10 @@ namespace Dynamite::PlayerProbe {
                     if (SoldierWarp::LocalIndex(id, index)) {
                         continue;
                     }
+                    static std::map<uint32_t, double> retryAfter; // soldiers whose capture failed (not updated), try later
+                    if (retryAfter[id] > now) {
+                        continue;
+                    }
                     const auto pos = DynamiteCore::GetSoldierPosition(id);
                     bool isNear = false;
                     for (const auto &pl : players) {
@@ -826,6 +832,7 @@ namespace Dynamite::PlayerProbe {
                     }
                     if (isNear) {
                         SoldierWarp::Capture(id); // one capture at a time, the next one on a later tick
+                        retryAfter[id] = now + 20.0;
                         break;
                     }
                 }
@@ -934,6 +941,34 @@ namespace Dynamite::PlayerProbe {
         if (!g_hook->dynamiteSyncImpl.GetCarryOffset(objectID, off, rel, 1.0)) {
             return false;
         }
+        // offsets arrive 10 times a second: ease toward the latest one so the body does not step between updates
+        static uint32_t smoothID = 0xffffffff;
+        static float sOff[3], sRel[4];
+        if (smoothID != objectID) {
+            smoothID = objectID;
+            memcpy(sOff, off, sizeof(sOff));
+            memcpy(sRel, rel, sizeof(sRel));
+        } else {
+            constexpr float k = 0.25f;
+            for (int i = 0; i < 3; i++) {
+                sOff[i] += (off[i] - sOff[i]) * k;
+            }
+            const float dot = sRel[0] * rel[0] + sRel[1] * rel[1] + sRel[2] * rel[2] + sRel[3] * rel[3];
+            const float sign = dot < 0 ? -1.0f : 1.0f;
+            float len = 0;
+            for (int i = 0; i < 4; i++) {
+                sRel[i] += (sign * rel[i] - sRel[i]) * k;
+                len += sRel[i] * sRel[i];
+            }
+            len = std::sqrt(len);
+            if (len > 0.0001f) {
+                for (auto &v : sRel) {
+                    v /= len;
+                }
+            }
+        }
+        memcpy(off, sOff, sizeof(sOff));
+        memcpy(rel, sRel, sizeof(sRel));
         if (!RecordTransform(g_hook->cfg.Host ? 1 : 0, cp, cr)) {
             return false;
         }
@@ -947,4 +982,9 @@ namespace Dynamite::PlayerProbe {
     }
 
     uint32_t LocalCarryTarget() { return localCarryTarget.load(); }
+
+    bool HasCarryOffset(const uint32_t objectID) {
+        float off[3], rel[4];
+        return g_hook->dynamiteSyncImpl.GetCarryOffset(objectID, off, rel, 0.5);
+    }
 }
