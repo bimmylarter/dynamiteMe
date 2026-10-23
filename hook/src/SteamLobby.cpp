@@ -114,8 +114,11 @@ namespace Dynamite::SteamLobby {
 
         // actions for the Lua thread
         std::atomic<bool> wantConnect{false}, wantReset{false};
+        std::atomic<uint32_t> wantPrepare{0}; // mission to open the sortie preparation for
         bool autoConnect = true;
+        bool autoPrepare = true;
         uint32_t autoConnectedFor = 0; // host mission code we already connected for
+        uint32_t autoPreparedFor = 0;  // host mission code we already opened the preparation for
 
         uint64_t nextPublish = 0, nextRead = 0;
 
@@ -266,6 +269,7 @@ namespace Dynamite::SteamLobby {
             members.clear();
             hostView = {};
             autoConnectedFor = 0;
+            autoPreparedFor = 0;
             SetPresence(nullptr);
             RestoreConfig();
         }
@@ -447,8 +451,16 @@ namespace Dynamite::SteamLobby {
             wantConnect = true;
             spdlog::info("[lobby] host is in {}, connecting", Describe(hostView.current));
         }
-        if (state == State::Member && IsHeliSpace(hostView.current) && autoConnectedFor != 0) {
-            autoConnectedFor = 0; // host back in the helicopter: connect again for the next mission
+        // partner, once connected: open the sortie preparation with the host's mission (loadout, landing zone, deploy)
+        if (state == State::Member && autoPrepare && IsMission(hostView.current) && autoPreparedFor != hostView.current &&
+            IsHeliSpace(currentMission.load()) && g_hook->dynamiteCore.GetSessionConnected() && now - lastLuaTick.load() < 2000) {
+            autoPreparedFor = hostView.current;
+            wantPrepare = hostView.current;
+            spdlog::info("[lobby] connected, opening the sortie for {}", Describe(hostView.current));
+        }
+        if (state == State::Member && IsHeliSpace(hostView.current)) {
+            autoConnectedFor = 0; // host back in the helicopter: connect and prepare again for the next mission
+            autoPreparedFor = 0;
         }
     }
 
@@ -461,6 +473,17 @@ namespace Dynamite::SteamLobby {
         }
         if (wantConnect.exchange(false)) {
             l_CreateClientSession(L);
+        }
+        if (const auto code = wantPrepare.exchange(0); code != 0) {
+            // same as picking the mission in the helicopter: TppMission.AcceptMission(code) stores it as the next
+            // mission and opens the sortie preparation screen
+            if (IsHeliSpace(currentMission.load())) {
+                lua_getfield(L, LUA_GLOBALSINDEX, "TppMission");
+                lua_getfield(L, -1, "AcceptMission");
+                lua_pushinteger(L, code);
+                const auto err = lua_pcall(L, 1, 0, 0);
+                spdlog::info("[lobby] TppMission.AcceptMission({}) {}", code, err == 0 ? "done" : "failed");
+            }
         }
         return 0;
     }
@@ -539,17 +562,25 @@ namespace Dynamite::SteamLobby {
                 }
                 const bool connected = g_hook->dynamiteCore.GetSessionConnected();
                 if (connected) {
-                    ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "Connected to the host. Deploy to %s.", Describe(hostView.current).c_str());
+                    ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "Connected to the host.");
+                    ImGui::TextWrapped("Choose your loadout and landing zone in the sortie and deploy to %s.", Describe(hostView.current).c_str());
                 } else if (IsMission(hostView.current)) {
                     ImGui::Text("Host is in the mission, %s", autoConnect ? "connecting..." : "press Connect.");
                 } else {
                     ImGui::TextDisabled("Wait for the host to deploy; you will be connected automatically.");
                 }
                 ImGui::Checkbox("Connect automatically", &autoConnect);
+                ImGui::Checkbox("Open the host's mission in my sortie when connected", &autoPrepare);
                 ImGui::BeginDisabled(!luaAlive);
                 if (ImGui::Button("Connect now")) {
                     wantConnect = true;
                 }
+                ImGui::SameLine();
+                ImGui::BeginDisabled(!IsMission(hostView.current) || !inHeli);
+                if (ImGui::Button("Open host's mission")) {
+                    wantPrepare = hostView.current;
+                }
+                ImGui::EndDisabled();
                 ImGui::SameLine();
                 if (ImGui::Button("Reset connection")) {
                     wantReset = true;
