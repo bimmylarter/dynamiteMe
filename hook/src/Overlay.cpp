@@ -51,7 +51,10 @@ namespace Dynamite::Overlay {
         WNDPROC wndProcOriginal = nullptr;
 
         std::atomic<bool> open{false};
-        std::mutex imguiMutex; // window messages and frames may arrive on different threads
+        // window messages and frames may arrive on different threads; recursive because the input handler re-enters
+        // the window procedure (SetCapture on a click sends WM_CAPTURECHANGED to the same window right away)
+        std::recursive_mutex imguiMutex;
+        std::atomic<uint32_t> mouseMessages{0}, keyMessages{0};
 
         bool initialized = false;
         bool initFailed = false;
@@ -77,6 +80,11 @@ namespace Dynamite::Overlay {
 
         LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (open.load() && initialized) {
+                if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
+                    mouseMessages++;
+                } else if (msg >= WM_KEYFIRST && msg <= WM_KEYLAST) {
+                    keyMessages++;
+                }
                 {
                     std::lock_guard lock(imguiMutex);
                     ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
@@ -125,7 +133,8 @@ namespace Dynamite::Overlay {
 
             wndProcOriginal = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WndProc)));
             currentSwapChain = swapChain;
-            spdlog::info("[overlay] ready, window {} {}x{}, scale {:.2f}, press F3", (void *)window, rc.right - rc.left, rc.bottom - rc.top, scale);
+            spdlog::info("[overlay] ready, window {} {}x{}, scale {:.2f}, render thread {}, window thread {}, press F3", (void *)window, rc.right - rc.left, rc.bottom - rc.top,
+                scale, GetCurrentThreadId(), GetWindowThreadProcessId(window, nullptr));
             return true;
         }
 
@@ -147,6 +156,7 @@ namespace Dynamite::Overlay {
                     connected ? "connected" : "not connected");
                 ImGui::Separator();
                 ImGui::Text("%.0f FPS", io.Framerate);
+                ImGui::TextDisabled("input: %u mouse, %u key messages, cursor %.0f %.0f", mouseMessages.load(), keyMessages.load(), io.MousePos.x, io.MousePos.y);
                 ImGui::Checkbox("Show ImGui demo window", &showDemo);
                 ImGui::TextDisabled("F3 closes this menu");
             }
