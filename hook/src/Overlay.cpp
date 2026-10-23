@@ -1,4 +1,5 @@
 #include "Overlay.h"
+#include "SteamLobby.h"
 
 #include "Version.h"
 #include "DynamiteHook.h"
@@ -155,6 +156,8 @@ namespace Dynamite::Overlay {
                 ImGui::TextColored(connected ? ImVec4(0.4f, 0.9f, 0.4f, 1.0f) : ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Co-op session: %s",
                     connected ? "connected" : "not connected");
                 ImGui::Separator();
+                SteamLobby::Draw();
+                ImGui::Separator();
                 ImGui::Text("%.0f FPS", io.Framerate);
                 ImGui::TextDisabled("input: %u mouse, %u key messages, cursor %.0f %.0f", mouseMessages.load(), keyMessages.load(), io.MousePos.x, io.MousePos.y);
                 ImGui::Checkbox("Show ImGui demo window", &showDemo);
@@ -195,6 +198,8 @@ namespace Dynamite::Overlay {
                 Toggle();
             }
             keyWasDown = down;
+
+            SteamLobby::Update();
 
             if (!open.load()) {
                 return presentOriginal(swapChain, syncInterval, flags);

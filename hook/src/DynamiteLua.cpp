@@ -5,6 +5,7 @@
 #include "lua/lauxlib.h"
 #include "lua/lua.h"
 #include "memtag.h"
+#include "SteamLobby.h"
 #include "spdlog/spdlog.h"
 
 namespace Dynamite {
@@ -493,6 +494,7 @@ namespace Dynamite {
             {"PopBodyUpdate", l_PopBodyUpdate},
             {"CaptureSoldier", l_CaptureSoldier},
             {"WarpSoldier", l_WarpSoldier},
+            {"LobbyTick", SteamLobby::LuaTick},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);

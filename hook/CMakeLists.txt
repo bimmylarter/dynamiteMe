@@ -108,6 +108,7 @@ add_library(${PROJECT_NAME} SHARED
         src/SoldierWarp.cpp
         src/DynamiteHook.cpp
         src/Overlay.cpp
+        src/SteamLobby.cpp
         src/main.cpp
         src/DInputProxy.cpp
 )

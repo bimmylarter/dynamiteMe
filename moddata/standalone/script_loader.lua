@@ -131,6 +131,10 @@ function script_loader.OnAllocate() end
 function script_loader.OnInitialize() end
 
 function script_loader.Update()
+	-- in-game lobby (overlay): current mission and the mission picked in the sortie
+	if Dynamite ~= nil and Dynamite.LobbyTick ~= nil then
+		Dynamite.LobbyTick(vars.missionCode or 0, gvars.mis_nextMissionCodeForMissionClear or 0)
+	end
 	script_loader.init(false)
 
 	if bit.band(PlayerVars.scannedButtonsDirect, script_loader.master_key) == script_loader.master_key then
