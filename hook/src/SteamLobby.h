@@ -17,4 +17,11 @@ namespace Dynamite::SteamLobby {
     // Dynamite.LobbyTick(currentMission, selectedMission), every frame from the game's Lua update.
     // Runs queued actions that must happen on the Lua thread (connecting to the host).
     int LuaTick(lua_State *L);
+
+    // Dynamite.LobbyPrepare(missionCode or 0): sortie preparation opened (TppMission.AcceptMission) or closed
+    int LuaPrepare(lua_State *L);
+
+    // Dynamite.LobbyDeploy(deployTime or -1, clusterId or -1) -> true when the deploy is held until the partner is
+    // connected to the host (called from TppMission.OnEndMissionPreparation)
+    int LuaDeploy(lua_State *L);
 }

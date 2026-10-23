@@ -495,6 +495,8 @@ namespace Dynamite {
             {"CaptureSoldier", l_CaptureSoldier},
             {"WarpSoldier", l_WarpSoldier},
             {"LobbyTick", SteamLobby::LuaTick},
+            {"LobbyPrepare", SteamLobby::LuaPrepare},
+            {"LobbyDeploy", SteamLobby::LuaDeploy},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);

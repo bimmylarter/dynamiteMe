@@ -100,6 +100,9 @@ namespace Dynamite::SteamLobby {
         struct HostView {
             uint64_t owner = 0;
             uint32_t selected = 0, current = 0;
+            uint32_t prep = 0;   // mission whose sortie preparation the host has open, 0 = none
+            int64_t route = 0;   // host's landing zone (helicopter route)
+            bool deploying = false;
             std::string version;
         } hostView;
         struct Member {
@@ -115,10 +118,29 @@ namespace Dynamite::SteamLobby {
         // actions for the Lua thread
         std::atomic<bool> wantConnect{false}, wantReset{false};
         std::atomic<uint32_t> wantPrepare{0}; // mission to open the sortie preparation for
+        std::atomic<int64_t> wantPrepareRoute{0};
+        std::atomic<bool> wantAbort{false};
+        uint64_t prepareRetryAt = 0;
+        int prepareAttempts = 0;
         bool autoConnect = true;
         bool autoPrepare = true;
         uint32_t autoConnectedFor = 0; // host mission code we already connected for
         uint32_t autoPreparedFor = 0;  // host mission code we already opened the preparation for
+
+        // sortie preparation on this machine (from TppMission.AcceptMission / OnAbortMissionPreparation)
+        std::atomic<uint32_t> myPrep{0};
+        std::atomic<int64_t> myRoute{0};
+        std::atomic<bool> myDeploying{false};
+        // partner: deploy pressed before the host's session was reachable, replayed once connected
+        struct HeldDeploy {
+            bool held = false;
+            bool timeNil = true, clusterNil = true;
+            int64_t time = 0, cluster = 0;
+            uint64_t since = 0;
+        } heldDeploy;
+        std::atomic<bool> wantDeploy{false};
+        bool bypassDeploy = false; // set while we replay the deploy, so it is not held again
+        bool loggedFirstTick = false;
 
         uint64_t nextPublish = 0, nextRead = 0;
 
@@ -270,6 +292,9 @@ namespace Dynamite::SteamLobby {
             hostView = {};
             autoConnectedFor = 0;
             autoPreparedFor = 0;
+            if (heldDeploy.held) {
+                wantDeploy = true; // do not leave the player stuck in the helicopter
+            }
             SetPresence(nullptr);
             RestoreConfig();
         }
@@ -356,12 +381,18 @@ namespace Dynamite::SteamLobby {
             SetData(lobby, "dynamite", SOFTWARE_VERSION);
             SetData(lobby, "selected", std::to_string(selectedMission.load()));
             SetData(lobby, "current", std::to_string(currentMission.load()));
+            SetData(lobby, "prep", std::to_string(myPrep.load()));
+            SetData(lobby, "route", std::to_string(myRoute.load()));
+            SetData(lobby, "deploying", myDeploying.load() ? "1" : "0");
         }
 
         void ReadHost() {
             hostView.owner = Owner(lobby);
             hostView.selected = static_cast<uint32_t>(strtoul(GetData(lobby, "selected").c_str(), nullptr, 10));
             hostView.current = static_cast<uint32_t>(strtoul(GetData(lobby, "current").c_str(), nullptr, 10));
+            hostView.prep = static_cast<uint32_t>(strtoul(GetData(lobby, "prep").c_str(), nullptr, 10));
+            hostView.deploying = GetData(lobby, "deploying") == "1";
+            hostView.route = strtoll(GetData(lobby, "route").c_str(), nullptr, 10);
             hostView.version = GetData(lobby, "dynamite");
             if (hostView.owner != 0 && hostView.owner != MyID()) {
                 SaveConfig();
@@ -440,7 +471,7 @@ namespace Dynamite::SteamLobby {
             }
         }
         if (state == State::Hosting && now >= nextPublish) {
-            nextPublish = now + 1000;
+            nextPublish = now + 250;
             Publish();
         }
 
@@ -451,16 +482,38 @@ namespace Dynamite::SteamLobby {
             wantConnect = true;
             spdlog::info("[lobby] host is in {}, connecting", Describe(hostView.current));
         }
-        // partner, once connected: open the sortie preparation with the host's mission (loadout, landing zone, deploy)
-        if (state == State::Member && autoPrepare && IsMission(hostView.current) && autoPreparedFor != hostView.current &&
-            IsHeliSpace(currentMission.load()) && g_hook->dynamiteCore.GetSessionConnected() && now - lastLuaTick.load() < 2000) {
-            autoPreparedFor = hostView.current;
-            wantPrepare = hostView.current;
-            spdlog::info("[lobby] connected, opening the sortie for {}", Describe(hostView.current));
+        // partner: follow the host into the sortie preparation (the host picked a mission), or into the mission the
+        // host is already playing when we joined late
+        if (state == State::Member) {
+            const uint32_t target = hostView.prep != 0 ? hostView.prep : (IsMission(hostView.current) ? hostView.current : 0);
+            if (autoPrepare && target != 0 && myPrep.load() != target && !myDeploying.load() && !heldDeploy.held && IsHeliSpace(currentMission.load()) &&
+                now - lastLuaTick.load() < 2000 && now >= prepareRetryAt) {
+                prepareRetryAt = now + 1500; // retried while we are busy (idroid open etc.)
+                if (autoPreparedFor != target) {
+                    spdlog::info("[lobby] host prepares {}, opening my sortie", Describe(target));
+                    prepareAttempts = 0;
+                }
+                autoPreparedFor = target;
+                if (prepareAttempts++ < 20) {
+                    wantPrepareRoute = hostView.prep != 0 ? hostView.route : 0;
+                    wantPrepare = target;
+                }
+            }
+            // host closed the sortie without deploying: close ours
+            if (hostView.prep == 0 && IsHeliSpace(hostView.current) && myPrep.load() != 0 && !myDeploying.load() && !heldDeploy.held &&
+                autoPreparedFor != 0) {
+                spdlog::info("[lobby] host left the sortie, leaving mine");
+                wantAbort = true;
+            }
+            if (hostView.prep == 0 && IsHeliSpace(hostView.current)) {
+                autoPreparedFor = 0; // host back in the helicopter / closed the sortie: follow again next time
+                autoConnectedFor = 0;
+            }
         }
-        if (state == State::Member && IsHeliSpace(hostView.current)) {
-            autoConnectedFor = 0; // host back in the helicopter: connect and prepare again for the next mission
-            autoPreparedFor = 0;
+        // partner: deploy held until connected
+        if (heldDeploy.held && (g_hook->dynamiteCore.GetSessionConnected() || state != State::Member)) {
+            spdlog::info("[lobby] {}, deploying", state == State::Member ? "connected to the host" : "left the lobby");
+            wantDeploy = true;
         }
     }
 
@@ -468,6 +521,14 @@ namespace Dynamite::SteamLobby {
         currentMission = static_cast<uint32_t>(luaL_checkinteger(L, 1));
         selectedMission = static_cast<uint32_t>(luaL_checkinteger(L, 2));
         lastLuaTick = GetTickCount64();
+        if (!IsHeliSpace(currentMission.load())) {
+            myPrep = 0; // in a mission (or the title): no sortie open
+            myDeploying = false;
+        }
+        if (!loggedFirstTick) {
+            loggedFirstTick = true;
+            spdlog::info("[lobby] game scripts updated: in {}, selected {}", currentMission.load(), selectedMission.load());
+        }
         if (wantReset.exchange(false)) {
             l_ResetClientSessionStateWithNotification(L);
         }
@@ -475,17 +536,80 @@ namespace Dynamite::SteamLobby {
             l_CreateClientSession(L);
         }
         if (const auto code = wantPrepare.exchange(0); code != 0) {
-            // same as picking the mission in the helicopter: TppMission.AcceptMission(code) stores it as the next
-            // mission and opens the sortie preparation screen
+            // same as picking a landing zone in the helicopter: TppMission.DynamiteFollowSortie (TppMission.lua)
             if (IsHeliSpace(currentMission.load())) {
                 lua_getfield(L, LUA_GLOBALSINDEX, "TppMission");
-                lua_getfield(L, -1, "AcceptMission");
+                lua_getfield(L, -1, "DynamiteFollowSortie");
                 lua_pushinteger(L, code);
-                const auto err = lua_pcall(L, 1, 0, 0);
-                spdlog::info("[lobby] TppMission.AcceptMission({}) {}", code, err == 0 ? "done" : "failed");
+                lua_pushinteger(L, wantPrepareRoute.load());
+                const auto err = lua_pcall(L, 2, 1, 0);
+                const bool entered = err == 0 && lua_toboolean(L, -1);
+                spdlog::info("[lobby] follow host into the sortie for {}: {}", code, err != 0 ? "script error" : (entered ? "entering" : "busy, retrying"));
+            }
+        }
+        if (wantAbort.exchange(false)) {
+            lua_getfield(L, LUA_GLOBALSINDEX, "TppMission");
+            lua_getfield(L, -1, "DynamiteAbortSortie");
+            lua_pcall(L, 0, 0, 0);
+        }
+        if (wantDeploy.exchange(false)) {
+            std::lock_guard lock(mutex);
+            if (heldDeploy.held) {
+                heldDeploy.held = false;
+                bypassDeploy = true;
+                lua_getfield(L, LUA_GLOBALSINDEX, "TppMission");
+                lua_getfield(L, -1, "OnEndMissionPreparation");
+                // nil for arguments the game passed as nil (a missing global reads as nil)
+                if (heldDeploy.timeNil) lua_getfield(L, LUA_GLOBALSINDEX, "__dynamite_nil"); else lua_pushinteger(L, heldDeploy.time);
+                if (heldDeploy.clusterNil) lua_getfield(L, LUA_GLOBALSINDEX, "__dynamite_nil"); else lua_pushinteger(L, heldDeploy.cluster);
+                const auto err = lua_pcall(L, 2, 0, 0);
+                bypassDeploy = false;
+                spdlog::info("[lobby] deploy replayed {}", err == 0 ? "" : "with an error");
             }
         }
         return 0;
+    }
+
+    namespace {
+        void Announce(lua_State *L, const char *text) {
+            lua_getfield(L, LUA_GLOBALSINDEX, "TppUiCommand");
+            lua_getfield(L, -1, "AnnounceLogView");
+            lua_pushstring(L, text);
+            lua_pcall(L, 1, 0, 0);
+        }
+    }
+
+    int LuaPrepare(lua_State *L) {
+        const auto code = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+        myRoute = luaL_checkinteger(L, 2);
+        myPrep = code;
+        if (code != 0) {
+            myDeploying = false;
+        }
+        spdlog::info("[lobby] sortie preparation {}", code != 0 ? "opened for " + Describe(code) : std::string("closed"));
+        return 0;
+    }
+
+    int LuaDeploy(lua_State *L) {
+        std::lock_guard lock(mutex);
+        const auto time = luaL_checkinteger(L, 1);
+        const auto cluster = luaL_checkinteger(L, 2);
+        if (bypassDeploy) {
+            myDeploying = true;
+            lua_pushboolean(L, false);
+            return 1;
+        }
+        if (state == State::Member && !g_hook->dynamiteCore.GetSessionConnected()) {
+            heldDeploy = {.held = true, .timeNil = time == -1, .clusterNil = cluster == -1, .time = time, .cluster = cluster, .since = GetTickCount64()};
+            spdlog::info("[lobby] deploy pressed before the host's session is up, waiting (time {}, cluster {})", time, cluster);
+            Announce(L, "dynamite: waiting for the host to deploy...");
+            lua_pushboolean(L, true);
+            return 1;
+        }
+        myDeploying = true;
+        spdlog::info("[lobby] deploying");
+        lua_pushboolean(L, false);
+        return 1;
     }
 
     void Draw() {
@@ -546,39 +670,53 @@ namespace Dynamite::SteamLobby {
             }
             ImGui::Separator();
             if (hosting) {
-                ImGui::Text("Selected mission: %s", Describe(selectedMission.load()).c_str());
                 ImGui::Text("You are in: %s", Describe(currentMission.load()).c_str());
-                ImGui::TextDisabled("Pick a mission in the sortie as usual; your partner sees it here.");
+                if (myPrep.load() != 0) {
+                    ImGui::Text("Sortie open: %s", Describe(myPrep.load()).c_str());
+                    ImGui::TextDisabled("Your partner's sortie opens on the same mission.");
+                } else {
+                    ImGui::TextDisabled("Pick a mission in the helicopter; your partner follows you into the sortie.");
+                }
                 if (ImGui::Button("Invite friend")) {
                     using F = void(__cdecl *)(void *self, uint64_t lobby);
                     Method<F>(api.friends, friendsActivateInviteDialog)(api.friends, lobby);
                 }
                 ImGui::SameLine();
             } else {
-                ImGui::Text("Host's mission: %s", Describe(hostView.selected).c_str());
                 ImGui::Text("Host is in: %s", Describe(hostView.current).c_str());
+                if (hostView.prep != 0) {
+                    ImGui::Text("Host's sortie: %s%s", Describe(hostView.prep).c_str(), hostView.deploying ? " (deploying)" : "");
+                }
                 if (hostView.version != SOFTWARE_VERSION) {
                     ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.3f, 1.0f), "Host runs dynamite %s, you run %s", hostView.version.c_str(), SOFTWARE_VERSION);
                 }
                 const bool connected = g_hook->dynamiteCore.GetSessionConnected();
-                if (connected) {
+                if (heldDeploy.held) {
+                    ImGui::TextColored(ImVec4(0.95f, 0.8f, 0.3f, 1.0f), "Ready. You deploy as soon as the host's mission is up.");
+                    if (ImGui::Button("Deploy now without waiting")) {
+                        wantDeploy = true;
+                    }
+                } else if (connected) {
                     ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "Connected to the host.");
-                    ImGui::TextWrapped("Choose your loadout and landing zone in the sortie and deploy to %s.", Describe(hostView.current).c_str());
+                } else if (myPrep.load() != 0) {
+                    ImGui::TextWrapped("Choose your loadout and landing zone and press deploy; you leave together with the host.");
                 } else if (IsMission(hostView.current)) {
                     ImGui::Text("Host is in the mission, %s", autoConnect ? "connecting..." : "press Connect.");
                 } else {
                     ImGui::TextDisabled("Wait for the host to deploy; you will be connected automatically.");
                 }
                 ImGui::Checkbox("Connect automatically", &autoConnect);
-                ImGui::Checkbox("Open the host's mission in my sortie when connected", &autoPrepare);
+                ImGui::Checkbox("Follow the host into the sortie", &autoPrepare);
                 ImGui::BeginDisabled(!luaAlive);
                 if (ImGui::Button("Connect now")) {
                     wantConnect = true;
                 }
                 ImGui::SameLine();
-                ImGui::BeginDisabled(!IsMission(hostView.current) || !inHeli);
+                const uint32_t hostTarget = hostView.prep != 0 ? hostView.prep : (IsMission(hostView.current) ? hostView.current : 0);
+                ImGui::BeginDisabled(hostTarget == 0 || !inHeli);
                 if (ImGui::Button("Open host's mission")) {
-                    wantPrepare = hostView.current;
+                    wantPrepareRoute = hostView.prep != 0 ? hostView.route : 0;
+                    wantPrepare = hostTarget;
                 }
                 ImGui::EndDisabled();
                 ImGui::SameLine();
