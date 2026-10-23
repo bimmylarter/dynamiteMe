@@ -1,4 +1,5 @@
 #include "dynamite.h"
+#include "Overlay.h"
 #include "windows.h"
 #include <eh.h>
 #include <exception>
@@ -157,6 +158,7 @@ namespace Dynamite {
         ReadConfig();
         CreateHooks();
         dynamiteCore.WithConfig(&cfg);
+        Overlay::Start();
     }
 
     Dynamite::~Dynamite() {
