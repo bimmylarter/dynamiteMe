@@ -315,7 +315,10 @@ end
 function e.SelectNextMissionHeliStartRoute(n, i, t)
 	-- dynamite lobby: landing zone picked, the sortie preparation opens; the partner follows
 	if not t and Dynamite ~= nil and Dynamite.LobbyPrepare ~= nil then
-		Dynamite.LobbyPrepare(n or 0, i or 0)
+		local ok, err = pcall(Dynamite.LobbyPrepare, type(n) == "number" and n or 0, type(i) == "number" and i or 0)
+		if not ok then
+			Dynamite.Log("lobby prepare error: " .. tostring(err))
+		end
 	end
 	local s
 	if not t then
@@ -2252,8 +2255,13 @@ function e.OnPlayerDead(s, n)
 end
 function e.OnEndMissionPreparation(n, s)
 	-- dynamite lobby: partner's deploy waits until the host's mission is up
-	if Dynamite ~= nil and Dynamite.LobbyDeploy ~= nil and Dynamite.LobbyDeploy(n or -1, s or -1) then
-		return
+	if Dynamite ~= nil and Dynamite.LobbyDeploy ~= nil then
+		local ok, held = pcall(Dynamite.LobbyDeploy, type(n) == "number" and n or -1, type(s) == "number" and s or -1)
+		if not ok then
+			Dynamite.Log("lobby deploy error: " .. tostring(held))
+		elseif held then
+			return
+		end
 	end
 	mvars.mis_selectedDeployTime = n
 	if gvars.mis_nextMissionCodeForEmergency == 0 then
@@ -2308,7 +2316,7 @@ function e.DynamiteAbortSortie()
 end
 function e.OnAbortMissionPreparation()
 	if Dynamite ~= nil and Dynamite.LobbyPrepare ~= nil then
-		Dynamite.LobbyPrepare(0, 0)
+		pcall(Dynamite.LobbyPrepare, 0, 0)
 	end
 	TppPlayer.ForceChangePlayerFromOcelot()
 	e.SetNextMissionCodeForMissionClear(u)

@@ -591,9 +591,10 @@ namespace Dynamite::SteamLobby {
     }
 
     int LuaDeploy(lua_State *L) {
-        std::lock_guard lock(mutex);
+        // read arguments before locking: a Lua argument error unwinds without running destructors
         const auto time = luaL_checkinteger(L, 1);
         const auto cluster = luaL_checkinteger(L, 2);
+        std::lock_guard lock(mutex);
         if (bypassDeploy) {
             myDeploying = true;
             lua_pushboolean(L, false);
