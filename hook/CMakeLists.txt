@@ -109,6 +109,7 @@ add_library(${PROJECT_NAME} SHARED
         src/CarryProbe.cpp
         src/BodyFollow.cpp
         src/PlayerProbe.cpp
+        src/HorseProbe.cpp
         src/DynamiteHook.cpp
         src/Overlay.cpp
         src/SteamLobby.cpp
