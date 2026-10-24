@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "Overlay.h"
+
 #pragma comment(linker, "/export:DirectInput8Create=DirectInput8Create")
 
 typedef HRESULT(WINAPI *DirectInput8Create_ptr)(HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, LPVOID *ppvOut, void *punkOuter);
@@ -50,5 +52,9 @@ extern "C" __declspec(dllexport) HRESULT DirectInput8Create(HINSTANCE hinst, DWO
         LoadProxiedDll();
     }
 
-    return DirectInput8Create_Orig(hinst, dwVersion, riidltf, ppvOut, punkOuter);
+    const auto r = DirectInput8Create_Orig(hinst, dwVersion, riidltf, ppvOut, punkOuter);
+    if (SUCCEEDED(r) && ppvOut != nullptr) {
+        Dynamite::Overlay::OnDirectInputCreated(*ppvOut); // block game input while the overlay is open
+    }
+    return r;
 }

@@ -131,6 +131,18 @@ function script_loader.OnAllocate() end
 function script_loader.OnInitialize() end
 
 function script_loader.Update()
+	-- in-game lobby (overlay): current mission and the mission picked in the sortie
+	if Dynamite ~= nil and Dynamite.LobbyTick ~= nil then
+		local ok, err = pcall(function()
+			local current = vars.missionCode
+			local selected = gvars.mis_nextMissionCodeForMissionClear
+			Dynamite.LobbyTick(type(current) == "number" and current or 0, type(selected) == "number" and selected or 0)
+		end)
+		if not ok and not script_loader.lobbyErrorLogged then
+			script_loader.lobbyErrorLogged = true
+			Dynamite.Log("lobby tick error: " .. tostring(err))
+		end
+	end
 	script_loader.init(false)
 
 	if bit.band(PlayerVars.scannedButtonsDirect, script_loader.master_key) == script_loader.master_key then

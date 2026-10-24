@@ -10,6 +10,7 @@
 #include "lua/lauxlib.h"
 #include "lua/lua.h"
 #include "memtag.h"
+#include "SteamLobby.h"
 #include "spdlog/spdlog.h"
 
 namespace Dynamite {
@@ -553,6 +554,9 @@ namespace Dynamite {
             {"CarryProbeArm", l_CarryProbeArm},
             {"CarryProbeDump", l_CarryProbeDump},
             {"CarryAttach", l_CarryAttach},
+            {"LobbyTick", SteamLobby::LuaTick},
+            {"LobbyPrepare", SteamLobby::LuaPrepare},
+            {"LobbyDeploy", SteamLobby::LuaDeploy},
             {nullptr, nullptr},
         };
         luaI_openlib(L, "Dynamite", libFuncs, 0);

@@ -313,6 +313,13 @@ function e.AcceptStartFobSneaking(i, s, n)
 	mvars.mis_nextClusterId = s
 end
 function e.SelectNextMissionHeliStartRoute(n, i, t)
+	-- dynamite lobby: landing zone picked, the sortie preparation opens; the partner follows
+	if not t and Dynamite ~= nil and Dynamite.LobbyPrepare ~= nil then
+		local ok, err = pcall(Dynamite.LobbyPrepare, type(n) == "number" and n or 0, type(i) == "number" and i or 0)
+		if not ok then
+			Dynamite.Log("lobby prepare error: " .. tostring(err))
+		end
+	end
 	local s
 	if not t then
 		s = e.IsEmergencyMission(n)
@@ -2247,6 +2254,15 @@ function e.OnPlayerDead(s, n)
 	--end
 end
 function e.OnEndMissionPreparation(n, s)
+	-- dynamite lobby: partner's deploy waits until the host's mission is up
+	if Dynamite ~= nil and Dynamite.LobbyDeploy ~= nil then
+		local ok, held = pcall(Dynamite.LobbyDeploy, type(n) == "number" and n or -1, type(s) == "number" and s or -1)
+		if not ok then
+			Dynamite.Log("lobby deploy error: " .. tostring(held))
+		elseif held then
+			return
+		end
+	end
 	mvars.mis_selectedDeployTime = n
 	if gvars.mis_nextMissionCodeForEmergency == 0 then
 		local i
@@ -2271,7 +2287,37 @@ end
 function e.GetNextMissionCodeForEmergency()
 	return (mvars.mis_emergencyMissionCode or gvars.mis_nextMissionCodeForEmergency)
 end
+-- dynamite lobby, partner side: enter the sortie preparation for the host's mission and landing zone, the same way
+-- the helicopter does after a landing zone is picked (heli_common_sequence OnSelectLandPoint)
+function e.DynamiteFollowSortie(n, route)
+	if not e.IsHelicopterSpace(vars.missionCode) then
+		return false
+	end
+	if TppSequence.GetCurrentSequenceName() ~= "Seq_Game_MainGame" then
+		return false
+	end
+	mvars.heliSequence_startFobSneaking = false
+	mvars.heliSequence_nextMissionCode = n
+	mvars.heliSequence_heliRoute = route
+	mvars.heliSequence_clusterCategory = nil
+	TppUI.FadeOut(TppUI.FADE_SPEED.FADE_HIGHESTSPEED, "OnSelectLandingPoint")
+	return true
+end
+-- dynamite lobby, partner side: the host left the sortie, leave ours too (heli_common_sequence OnAbortMissionPreparation)
+function e.DynamiteAbortSortie()
+	local seq = TppSequence.GetCurrentSequenceName()
+	if seq ~= "Seq_Game_MissionPreparationTop" and seq ~= "Seq_Game_MissionPreparation_SelectItem"
+		and seq ~= "Seq_Game_MissionPreparation_SelectSlot" and seq ~= "Seq_Game_MissionPreparation_SelectDetail" then
+		return false
+	end
+	e.OnAbortMissionPreparation()
+	TppUI.FadeOut(TppUI.FADE_SPEED.FADE_HIGHESTSPEED, "OnMissionPreparationAbort")
+	return true
+end
 function e.OnAbortMissionPreparation()
+	if Dynamite ~= nil and Dynamite.LobbyPrepare ~= nil then
+		pcall(Dynamite.LobbyPrepare, 0, 0)
+	end
 	TppPlayer.ForceChangePlayerFromOcelot()
 	e.SetNextMissionCodeForMissionClear(u)
 	gvars.heli_missionStartRoute = 0

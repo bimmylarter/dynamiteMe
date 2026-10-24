@@ -45,6 +45,24 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(flatbuffers)
 
+# Dear ImGui (in-game overlay)
+FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG v1.91.9
+)
+FetchContent_MakeAvailable(imgui)
+add_library(imgui STATIC
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_demo.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp
+)
+target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+
 include_directories(
         src/
 )
@@ -92,6 +110,8 @@ add_library(${PROJECT_NAME} SHARED
         src/BodyFollow.cpp
         src/PlayerProbe.cpp
         src/DynamiteHook.cpp
+        src/Overlay.cpp
+        src/SteamLobby.cpp
         src/main.cpp
         src/DInputProxy.cpp
 )
@@ -101,4 +121,4 @@ add_dependencies(${PROJECT_NAME} version)
 target_compile_options(${PROJECT_NAME} PUBLIC -fpermissive ${OPTS})
 
 target_link_options(${PROJECT_NAME} PUBLIC -static)
-target_link_libraries(${PROJECT_NAME} flatbuffers minhook mINI spdlog::spdlog_header_only)
+target_link_libraries(${PROJECT_NAME} flatbuffers minhook mINI spdlog::spdlog_header_only imgui d3dcompiler dwmapi)
