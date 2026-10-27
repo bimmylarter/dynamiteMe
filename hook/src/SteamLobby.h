@@ -24,4 +24,7 @@ namespace Dynamite::SteamLobby {
     // Dynamite.LobbyDeploy(deployTime or -1, clusterId or -1) -> true when the deploy is held until the partner is
     // connected to the host (called from TppMission.OnEndMissionPreparation)
     int LuaDeploy(lua_State *L);
+
+    // TppMission.OnMissionStart ran (seen in its Dynamite.Log line)
+    void OnMissionStart(uint32_t missionCode);
 }
