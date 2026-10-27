@@ -2115,7 +2115,8 @@ struct CarryOffset FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ROT_X = 8,
     VT_ROT_Y = 10,
     VT_ROT_Z = 12,
-    VT_ROT_W = 14
+    VT_ROT_W = 14,
+    VT_WORLD = 16
   };
   uint32_t object_id() const {
     return GetField<uint32_t>(VT_OBJECT_ID, 0);
@@ -2135,6 +2136,9 @@ struct CarryOffset FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   float rot_w() const {
     return GetField<float>(VT_ROT_W, 0.0f);
   }
+  bool world() const {
+    return GetField<uint8_t>(VT_WORLD, 0) != 0;
+  }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_OBJECT_ID, 4) &&
@@ -2143,6 +2147,7 @@ struct CarryOffset FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<float>(verifier, VT_ROT_Y, 4) &&
            VerifyField<float>(verifier, VT_ROT_Z, 4) &&
            VerifyField<float>(verifier, VT_ROT_W, 4) &&
+           VerifyField<uint8_t>(verifier, VT_WORLD, 1) &&
            verifier.EndTable();
   }
 };
@@ -2169,6 +2174,9 @@ struct CarryOffsetBuilder {
   void add_rot_w(float rot_w) {
     fbb_.AddElement<float>(CarryOffset::VT_ROT_W, rot_w, 0.0f);
   }
+  void add_world(bool world) {
+    fbb_.AddElement<uint8_t>(CarryOffset::VT_WORLD, static_cast<uint8_t>(world), 0);
+  }
   explicit CarryOffsetBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2187,7 +2195,8 @@ inline ::flatbuffers::Offset<CarryOffset> CreateCarryOffset(
     float rot_x = 0.0f,
     float rot_y = 0.0f,
     float rot_z = 0.0f,
-    float rot_w = 0.0f) {
+    float rot_w = 0.0f,
+    bool world = false) {
   CarryOffsetBuilder builder_(_fbb);
   builder_.add_rot_w(rot_w);
   builder_.add_rot_z(rot_z);
@@ -2195,6 +2204,7 @@ inline ::flatbuffers::Offset<CarryOffset> CreateCarryOffset(
   builder_.add_rot_x(rot_x);
   builder_.add_offset(offset);
   builder_.add_object_id(object_id);
+  builder_.add_world(world);
   return builder_.Finish();
 }
 

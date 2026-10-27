@@ -199,4 +199,5 @@ table CarryOffset {
     rot_y: float32;
     rot_z: float32;
     rot_w: float32;
+    world: bool = false; // offset / rot are the soldier's world position / rotation (after a put-down)
 }

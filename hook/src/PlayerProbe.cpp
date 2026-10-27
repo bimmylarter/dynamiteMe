@@ -181,7 +181,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v26, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v27, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -336,6 +336,7 @@ namespace Dynamite::PlayerProbe {
         std::atomic<uint64_t> heldCtrl{0};
         std::atomic<uint32_t> heldIndex{0xffffffff};
         std::atomic<uint32_t> heldID{0xffff};
+        uint64_t heldSince = 0;
         std::atomic<int> suppressLogBudget{0};
 
         template <int N>
@@ -568,6 +569,7 @@ namespace Dynamite::PlayerProbe {
                 heldCtrl = reinterpret_cast<uint64_t>(ctrl);
                 heldIndex = index;
                 heldID = m.objectID;
+                heldSince = GetTickCount64();
             }
         }
 
@@ -600,6 +602,41 @@ namespace Dynamite::PlayerProbe {
             return rot[3] != 0.0f || rot[1] != 0.0f;
         }
 
+        // v27: the player's character object (what is drawn), from its motion controller; falls back to the info record.
+        // On the watcher this is the partner's puppet as it is placed this frame, not the network target position.
+        bool CharacterTransform(const int player, float pos[3], float rot[4]) {
+            float rp[3], rr[4];
+            const bool haveRecord = RecordTransform(player, rp, rr);
+            const auto ctrl = motionCtrl[player];
+            if (ctrl != nullptr) {
+                using GetCharaFunc = void *(__fastcall *)(void *ctrl, uint32_t index);
+                using GetRotFunc = void *(__fastcall *)(void *obj);
+                const auto obj = reinterpret_cast<GetCharaFunc>((*reinterpret_cast<void ***>(ctrl))[0x388 / 8])(ctrl, static_cast<uint32_t>(player));
+                if (obj != nullptr) {
+                    const auto p = reinterpret_cast<float *>(static_cast<char *>(obj) + 0x20);
+                    const auto r = static_cast<float *>(reinterpret_cast<GetRotFunc>((*reinterpret_cast<void ***>(obj))[0x78 / 8])(obj));
+                    const bool sane = !haveRecord || (std::abs(p[0] - rp[0]) < 5.0f && std::abs(p[2] - rp[2]) < 5.0f);
+                    static bool logged[2] = {false, false};
+                    if (!logged[player]) {
+                        logged[player] = true;
+                        spdlog::info("[playerprobe] player {} character {} pos {:.2f} {:.2f} {:.2f} rot {:.2f} {:.2f} {:.2f} {:.2f} | record {:.2f} {:.2f} {:.2f} rot {:.2f} {:.2f} {:.2f} {:.2f}{}",
+                            player, obj, p[0], p[1], p[2], r[0], r[1], r[2], r[3], rp[0], rp[1], rp[2], rr[0], rr[1], rr[2], rr[3], sane ? "" : " (too far, using the record)");
+                    }
+                    if (sane && r != nullptr && (r[3] != 0.0f || r[1] != 0.0f)) {
+                        memcpy(pos, p, 3 * sizeof(float));
+                        memcpy(rot, r, 4 * sizeof(float));
+                        return true;
+                    }
+                }
+            }
+            if (!haveRecord) {
+                return false;
+            }
+            memcpy(pos, rp, sizeof(rp));
+            memcpy(rot, rr, sizeof(rr));
+            return true;
+        }
+
         void SendCarryOffset(const int local, const double now) {
             static double next = 0;
             static uint32_t logged = 0xffff;
@@ -607,13 +644,24 @@ namespace Dynamite::PlayerProbe {
             if (target == 0xffff || now < next) {
                 return;
             }
-            next = now + 0.1;
+            next = now + 0.05; // v27: 20 a second
             float sp[3], sr[4], cp[3], cr[4];
             if (!SoldierWarp::GetTransform(target, sp, sr)) {
                 SoldierWarp::Capture(target);
                 return;
             }
-            if (!RecordTransform(local, cp, cr)) {
+            // v27: after the put-down the soldier stays where it is in the world while the carrier walks away; send
+            // its world transform so the watcher does not move it with the partner
+            if (localCarryTarget.load() == 0xffff) {
+                static double nextWorldTrace = 0;
+                if (now >= nextWorldTrace) {
+                    nextWorldTrace = now + 0.25;
+                    spdlog::info("[playerprobe] put-down trace {}: soldier {:.2f} {:.2f} {:.2f} rot {:.2f} {:.2f} {:.2f} {:.2f}", target, sp[0], sp[1], sp[2], sr[0], sr[1], sr[2], sr[3]);
+                }
+                g_hook->dynamiteSyncImpl.SendCarryOffset(target, sp, sr, true);
+                return;
+            }
+            if (!CharacterTransform(local, cp, cr)) {
                 return;
             }
             const float d[3] = {sp[0] - cp[0], sp[1] - cp[1], sp[2] - cp[2]};
@@ -861,7 +909,9 @@ namespace Dynamite::PlayerProbe {
             }
         }
         FlushPendingBody(remote);
-        if (heldID.load() != 0xffff && (!BodyFollow::Handles(heldID.load()) || localCarryTarget.load() == heldID.load())) {
+        // v27: held from the first replayed pickup request (the follow may start a moment later), until the follow ends
+        if (heldID.load() != 0xffff && ((BodyFollow::FollowedID() != heldID.load() && GetTickCount64() - heldSince > 1500) ||
+                                        localCarryTarget.load() == heldID.load())) {
             spdlog::info("[playerprobe] soldier {} no longer carried by partner, its own animations resume", heldID.load());
             heldCtrl = 0;
             heldIndex = 0xffffffff;
@@ -968,14 +1018,17 @@ namespace Dynamite::PlayerProbe {
             return false;
         }
         float off[3], rel[4], cp[3], cr[4];
-        if (!g_hook->dynamiteSyncImpl.GetCarryOffset(objectID, off, rel, 1.0)) {
+        bool world = false;
+        if (!g_hook->dynamiteSyncImpl.GetCarryOffset(objectID, off, rel, 1.0, &world)) {
             return false;
         }
-        // offsets arrive 10 times a second: ease toward the latest one so the body does not step between updates
+        // offsets arrive 20 times a second: ease toward the latest one so the body does not step between updates
         static uint32_t smoothID = 0xffffffff;
+        static bool smoothWorld = false;
         static float sOff[3], sRel[4];
-        if (smoothID != objectID) {
+        if (smoothID != objectID || smoothWorld != world) {
             smoothID = objectID;
+            smoothWorld = world;
             memcpy(sOff, off, sizeof(sOff));
             memcpy(sRel, rel, sizeof(sRel));
         } else {
@@ -999,7 +1052,13 @@ namespace Dynamite::PlayerProbe {
         }
         memcpy(off, sOff, sizeof(sOff));
         memcpy(rel, sRel, sizeof(sRel));
-        if (!RecordTransform(g_hook->cfg.Host ? 1 : 0, cp, cr)) {
+        if (world) {
+            // put down: the carrier's world transform of the soldier, independent of where the partner goes
+            memcpy(pos, off, 3 * sizeof(float));
+            memcpy(rot, rel, 4 * sizeof(float));
+            return true;
+        }
+        if (!CharacterTransform(g_hook->cfg.Host ? 1 : 0, cp, cr)) {
             return false;
         }
         // v25: carrier crouching. The carried soldier's root does not follow the carrier's crouch on the carrier's

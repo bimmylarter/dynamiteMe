@@ -1254,11 +1254,11 @@ namespace Dynamite {
         carryMotions.push_back(u);
     }
 
-    void DynamiteSyncImpl::SendCarryOffset(const uint32_t objectID, const float offset[3], const float rot[4]) {
+    void DynamiteSyncImpl::SendCarryOffset(const uint32_t objectID, const float offset[3], const float rot[4], const bool world) {
         packetNumber++;
         flatbuffers::FlatBufferBuilder builder(128);
         const auto p = DynamiteMessage::Vec3(offset[0], offset[1], offset[2]);
-        const auto sv = DynamiteMessage::CreateCarryOffset(builder, objectID, &p, rot[0], rot[1], rot[2], rot[3]);
+        const auto sv = DynamiteMessage::CreateCarryOffset(builder, objectID, &p, rot[0], rot[1], rot[2], rot[3], world);
         const auto message = DynamiteMessage::CreateMessageWrapper(builder, packetNumber, DynamiteMessage::Message_CarryOffset, sv.Union());
         builder.Finish(message);
         SendRaw(&builder);
@@ -1280,15 +1280,19 @@ namespace Dynamite {
         carryOffsetRot[2] = m->rot_z();
         carryOffsetRot[3] = m->rot_w();
         carryOffsetTick = GetTickCount64();
+        carryOffsetWorld = m->world();
     }
 
-    bool DynamiteSyncImpl::GetCarryOffset(const uint32_t objectID, float offset[3], float rot[4], const double maxAgeSeconds) {
+    bool DynamiteSyncImpl::GetCarryOffset(const uint32_t objectID, float offset[3], float rot[4], const double maxAgeSeconds, bool *world) {
         std::lock_guard lock(bodyMutex);
         if (carryOffsetID != objectID || GetTickCount64() - carryOffsetTick > static_cast<uint64_t>(maxAgeSeconds * 1000)) {
             return false;
         }
         memcpy(offset, carryOffset, sizeof(carryOffset));
         memcpy(rot, carryOffsetRot, sizeof(carryOffsetRot));
+        if (world != nullptr) {
+            *world = carryOffsetWorld;
+        }
         return true;
     }
 

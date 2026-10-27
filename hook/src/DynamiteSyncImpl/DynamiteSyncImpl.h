@@ -123,9 +123,9 @@ namespace Dynamite {
         std::optional<CarryMotionUpdate> PopCarryMotion();
 
         // Carried soldier transform relative to the carrier: latest received value per sender
-        void SendCarryOffset(uint32_t objectID, const float offset[3], const float rot[4]);
+        void SendCarryOffset(uint32_t objectID, const float offset[3], const float rot[4], bool world = false);
         void HandleCarryOffset(const DynamiteMessage::MessageWrapper *w);
-        bool GetCarryOffset(uint32_t objectID, float offset[3], float rot[4], double maxAgeSeconds);
+        bool GetCarryOffset(uint32_t objectID, float offset[3], float rot[4], double maxAgeSeconds, bool *world = nullptr);
 
         void *steamUDPAddress = nullptr;
         void *steamUDPSocketInfo = nullptr;
@@ -145,6 +145,7 @@ namespace Dynamite {
         float carryOffset[3]{};
         float carryOffsetRot[4]{};
         uint64_t carryOffsetTick = 0;
+        bool carryOffsetWorld = false;
         std::vector<std::string> enemyVars = {
             // "cpNames",
             // "cpFlags",
