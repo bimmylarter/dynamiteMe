@@ -11,6 +11,8 @@
 #include "lua/lua.h"
 #include "memtag.h"
 #include "SteamLobby.h"
+#include <cstring>
+#include <cstdlib>
 #include "spdlog/spdlog.h"
 
 namespace Dynamite {
@@ -359,6 +361,12 @@ namespace Dynamite {
         }
 
         spdlog::info("[lua] {}", str);
+
+        // lobby: the host's mission is up once its OnMissionStart runs
+        constexpr char missionStart[] = "TppMission.OnMissionStart, mission code ";
+        if (strncmp(str, missionStart, sizeof(missionStart) - 1) == 0) {
+            SteamLobby::OnMissionStart(static_cast<uint32_t>(strtoul(str + sizeof(missionStart) - 1, nullptr, 10)));
+        }
 
         return 0;
     }

@@ -103,6 +103,8 @@ namespace Dynamite::SteamLobby {
             uint32_t prep = 0;   // mission whose sortie preparation the host has open, 0 = none
             int64_t route = 0;   // host's landing zone (helicopter route)
             bool deploying = false;
+            uint32_t started = 0;      // mission the host has actually started (its session exists), 0 = none
+            bool hasStarted = false;   // the host publishes "started" (older builds do not)
             std::string version;
         } hostView;
         struct Member {
@@ -129,6 +131,9 @@ namespace Dynamite::SteamLobby {
 
         // sortie preparation on this machine (from TppMission.AcceptMission / OnAbortMissionPreparation)
         std::atomic<uint32_t> myPrep{0};
+        std::atomic<uint32_t> myStarted{0}; // mission whose TppMission.OnMissionStart ran here
+        uint64_t connectAt = 0;             // partner: when we last asked to connect
+        int connectAttempts = 0;
         std::atomic<int64_t> myRoute{0};
         std::atomic<bool> myDeploying{false};
         // partner: deploy pressed before the host's session was reachable, replayed once connected
@@ -384,6 +389,7 @@ namespace Dynamite::SteamLobby {
             SetData(lobby, "prep", std::to_string(myPrep.load()));
             SetData(lobby, "route", std::to_string(myRoute.load()));
             SetData(lobby, "deploying", myDeploying.load() ? "1" : "0");
+            SetData(lobby, "started", std::to_string(myStarted.load()));
         }
 
         void ReadHost() {
@@ -393,6 +399,9 @@ namespace Dynamite::SteamLobby {
             hostView.prep = static_cast<uint32_t>(strtoul(GetData(lobby, "prep").c_str(), nullptr, 10));
             hostView.deploying = GetData(lobby, "deploying") == "1";
             hostView.route = strtoll(GetData(lobby, "route").c_str(), nullptr, 10);
+            const auto started = GetData(lobby, "started");
+            hostView.hasStarted = !started.empty();
+            hostView.started = static_cast<uint32_t>(strtoul(started.c_str(), nullptr, 10));
             hostView.version = GetData(lobby, "dynamite");
             if (hostView.owner != 0 && hostView.owner != MyID()) {
                 SaveConfig();
@@ -475,12 +484,25 @@ namespace Dynamite::SteamLobby {
             Publish();
         }
 
-        // partner: connect to the host's session once the host is in a mission and we are in the helicopter
-        if (state == State::Member && autoConnect && IsMission(hostView.current) && autoConnectedFor != hostView.current &&
-            IsHeliSpace(currentMission.load()) && !g_hook->dynamiteCore.GetSessionConnected() && now - lastLuaTick.load() < 2000) {
+        // partner: connect to the host's session once the host's mission has started (its session is created during
+        // the load, a connect before that never completes) and we are in the helicopter
+        const bool hostReady = IsMission(hostView.current) && (hostView.hasStarted ? hostView.started == hostView.current : true);
+        if (state == State::Member && autoConnect && hostReady && autoConnectedFor != hostView.current && IsHeliSpace(currentMission.load()) &&
+            !g_hook->dynamiteCore.GetSessionConnected() && now - lastLuaTick.load() < 2000) {
             autoConnectedFor = hostView.current;
+            connectAt = now;
+            connectAttempts = 1;
             wantConnect = true;
-            spdlog::info("[lobby] host is in {}, connecting", Describe(hostView.current));
+            spdlog::info("[lobby] host started {}, connecting", Describe(hostView.current));
+        }
+        // no connection after a while: reset the session state and try again (a few times)
+        if (state == State::Member && autoConnect && autoConnectedFor != 0 && autoConnectedFor == hostView.current && hostReady &&
+            !g_hook->dynamiteCore.GetSessionConnected() && IsHeliSpace(currentMission.load()) && connectAttempts < 4 && now - connectAt > 15000) {
+            connectAt = now;
+            connectAttempts++;
+            wantReset = true;
+            wantConnect = true;
+            spdlog::info("[lobby] not connected to the host yet, retrying (attempt {})", connectAttempts);
         }
         // partner: follow the host into the sortie preparation (the host picked a mission), or into the mission the
         // host is already playing when we joined late
@@ -524,6 +546,8 @@ namespace Dynamite::SteamLobby {
         if (!IsHeliSpace(currentMission.load())) {
             myPrep = 0; // in a mission (or the title): no sortie open
             myDeploying = false;
+        } else {
+            myStarted = 0;
         }
         if (!loggedFirstTick) {
             loggedFirstTick = true;
@@ -576,6 +600,13 @@ namespace Dynamite::SteamLobby {
             lua_getfield(L, -1, "AnnounceLogView");
             lua_pushstring(L, text);
             lua_pcall(L, 1, 0, 0);
+        }
+    }
+
+    void OnMissionStart(const uint32_t code) {
+        myStarted = IsMission(code) ? code : 0;
+        if (myStarted.load() != 0) {
+            spdlog::info("[lobby] mission {} started", Describe(code));
         }
     }
 
