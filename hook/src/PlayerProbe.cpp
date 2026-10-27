@@ -806,6 +806,46 @@ namespace Dynamite::PlayerProbe {
 
         InstallInfoHook();
         FindMotionControllers();
+        // v28: dead-body research. Which game object types exist (TppCorpse among them?), and the life state of
+        // downed soldiers next to a player, every few seconds while someone stands over one.
+        {
+            static double nextTypes = 0, nextNear = 0;
+            if (now >= nextTypes) {
+                nextTypes = now + 60.0;
+                std::string types;
+                for (uint32_t type = 0; type < 128; type++) {
+                    int count = 0;
+                    for (uint32_t index = 0; index < 512; index++) {
+                        count += FindGameObjectWithID(type * 512 + index) != nullptr;
+                    }
+                    if (count > 0) {
+                        types += fmt::format(" {}:{}", type, count);
+                    }
+                }
+                spdlog::info("[corpseprobe] game object types (type:count):{}", types);
+            }
+            if (now >= nextNear) {
+                nextNear = now + 2.0;
+                const Vector3 players[2] = {DynamiteCore::GetPlayerPosition(0), DynamiteCore::GetPlayerPosition(1)};
+                for (uint32_t id = 1024; id < 1024 + 512; id++) {
+                    if (FindGameObjectWithID(id) == nullptr) {
+                        continue;
+                    }
+                    const auto life = DynamiteCore::GetSoldierLifeStatus(id);
+                    if (life == ENPCLifeState::NORMAL) {
+                        continue;
+                    }
+                    const auto pos = DynamiteCore::GetSoldierPosition(id);
+                    for (int p = 0; p < 2; p++) {
+                        const auto dx = pos.x - players[p].x, dz = pos.z - players[p].z;
+                        if (dx * dx + dz * dz < 3.0f * 3.0f) {
+                            spdlog::info("[corpseprobe] soldier {} life {} at {:.2f} {:.2f} {:.2f}, player {} {:.1f} m away", id, static_cast<int>(life), pos.x, pos.y,
+                                pos.z, p, std::sqrt(dx * dx + dz * dz));
+                        }
+                    }
+                }
+            }
+        }
         // carrier side: remember what we carry, send queued carry animation requests
         if (auto st = StateArrays()) {
             const int local = g_hook->cfg.Host ? 0 : 1;
