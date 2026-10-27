@@ -181,7 +181,7 @@ namespace Dynamite::PlayerProbe {
                 exeEnd = exeBase + nt->OptionalHeader.SizeOfImage;
                 const uint8_t expected[] = {0x48, 0x63, 0x05}; // movsxd rax, [rip+...]
                 ok = memcmp(Exe(positionGetter), expected, sizeof(expected)) == 0 ? 1 : 0;
-                spdlog::info("[playerprobe] probe build v27, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
+                spdlog::info("[playerprobe] probe build v28, {}", ok ? "enabled" : "player info functions not found (game version?), disabled");
             }
             return ok == 1;
         }
@@ -343,9 +343,7 @@ namespace Dynamite::PlayerProbe {
         uint64_t __fastcall hkMotion(void *ctrl, uint32_t player, uint32_t layer, uint64_t state, float blend, int32_t flags) {
             const auto ret = ToExe(reinterpret_cast<uint64_t>(__builtin_return_address(0)));
             LogMotion(N, ctrl, player, layer, state, blend, flags, ret);
-            if (!replaying.load()) {
-                HorseProbe::OnMotion(ctrl, player, layer, state, ret, ctrl == motionCtrl[0] || ctrl == motionCtrl[1]);
-            }
+            // v28: horse probe off (it kept controllers across missions and called into stale ones during a mission load)
             if (!replaying.load() && heldCtrl.load() != 0 && reinterpret_cast<uint64_t>(ctrl) == heldCtrl.load() && player == heldIndex.load() && layer == 0) {
                 if (suppressLogBudget.load() > 0 && suppressLogBudget.fetch_sub(1) > 0) {
                     spdlog::info("[playerprobe] soldier {} is carried by partner, local state {:012x} from {:#x} dropped", heldID.load(), state & 0xffffffffffffull, ret);
@@ -959,8 +957,6 @@ namespace Dynamite::PlayerProbe {
             }
             haveState = true;
         }
-
-        HorseProbe::Tick();
 
         // record field changes, twice a second
         if (now < nextDiff) {

@@ -34,6 +34,8 @@ namespace Dynamite::SoldierWarp {
             uint64_t controller;
             uint32_t localIndex;
             uint64_t table;
+            bool placed = false;      // moved by Warp at least once
+            float lastPlaced[3]{};    // where Warp last put it
         };
         std::mutex knownMutex;
         std::map<uint32_t, Known> known;
@@ -179,7 +181,7 @@ namespace Dynamite::SoldierWarp {
             if (capturedObjectID.load() == objectID) {
                 {
                     std::lock_guard lock(knownMutex);
-                    known[objectID] = {capturedController.load(), capturedLocalIndex.load(), reinterpret_cast<uint64_t>(entry) - 0x10 * (objectID - 1024)};
+                    known[objectID] = {capturedController.load(), capturedLocalIndex.load(), reinterpret_cast<uint64_t>(entry) - 0x10 * (objectID - 1024), false, {}};
                 }
                 spdlog::info("SoldierWarp::Capture, soldier {} controller {:#x} local index {}", objectID, capturedController.load(), capturedLocalIndex.load());
             } else {
@@ -215,8 +217,16 @@ namespace Dynamite::SoldierWarp {
 
         // character object must belong to this soldier: near its position table entry (the entry is not updated
         // while the soldier is carried or moved by us, so only a loose check is possible)
+        // v28: or near where we last put it (a long carry takes it far from its stale table entry)
         const auto objPos = reinterpret_cast<float *>((char *)obj + 0x20);
-        if (std::abs(objPos[0] - entry[0]) > 30.0f || std::abs(objPos[2] - entry[2]) > 30.0f) {
+        bool nearPlaced = false;
+        {
+            std::lock_guard lock(knownMutex);
+            const auto it = known.find(objectID);
+            nearPlaced = it != known.end() && it->second.placed && std::abs(objPos[0] - it->second.lastPlaced[0]) < 5.0f &&
+                         std::abs(objPos[2] - it->second.lastPlaced[2]) < 5.0f;
+        }
+        if (!nearPlaced && (std::abs(objPos[0] - entry[0]) > 30.0f || std::abs(objPos[2] - entry[2]) > 30.0f)) {
             spdlog::info("{}, soldier {} character object does not match, recapture needed", __PRETTY_FUNCTION__, objectID);
             std::lock_guard lock(knownMutex);
             known.erase(objectID);
@@ -235,6 +245,16 @@ namespace Dynamite::SoldierWarp {
 
         reinterpret_cast<SetRotFunc>(objVtable[0x70 / 8])(obj, rot);
         reinterpret_cast<SetTransformFunc>(objVtable[0x68 / 8])(obj, pos, rot);
+        {
+            std::lock_guard lock(knownMutex);
+            const auto it = known.find(objectID);
+            if (it != known.end()) {
+                it->second.placed = true;
+                it->second.lastPlaced[0] = x;
+                it->second.lastPlaced[1] = y;
+                it->second.lastPlaced[2] = z;
+            }
+        }
 
         if (log) {
             spdlog::info("{}, soldier {} moved to {} {} {}", __PRETTY_FUNCTION__, objectID, x, y, z);
