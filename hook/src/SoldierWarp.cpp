@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstring>
 #include <thread>
+#include <string>
 #include <tlhelp32.h>
 
 namespace Dynamite::SoldierWarp {
@@ -137,6 +138,147 @@ namespace Dynamite::SoldierWarp {
     }
 
     bool Lookup(const uint32_t objectID, uint64_t &controller, uint32_t &localIndex);
+
+    namespace {
+        // --- v29 write watch on DR1 ---
+        constexpr uint64_t dr7Mask1 = 0x00F0000Cull;                                 // L1/G1 + RW1/LEN1
+        constexpr uint64_t dr7Write4At1 = (1ull << 2) | (1ull << 20) | (3ull << 22); // L1, write, 4 bytes
+        std::atomic<bool> watching{false};
+        constexpr int maxWriters = 16;
+        std::atomic<uint64_t> writerRips[maxWriters]{};
+        std::atomic<uint64_t> writerRets[maxWriters]{};
+        std::atomic<uint32_t> writerCounts[maxWriters]{};
+        PVOID watchHandle = nullptr;
+
+        LONG WINAPI WatchHandler(EXCEPTION_POINTERS *info) {
+            if (info->ExceptionRecord->ExceptionCode != EXCEPTION_SINGLE_STEP) {
+                return EXCEPTION_CONTINUE_SEARCH;
+            }
+            auto *ctx = info->ContextRecord;
+            if ((ctx->Dr6 & 2) == 0) {
+                return EXCEPTION_CONTINUE_SEARCH;
+            }
+            ctx->Dr6 &= ~2ull;
+            if (!watching.load()) {
+                ctx->Dr7 &= ~dr7Mask1; // late hit after the watch: clear on this thread and go on
+                return EXCEPTION_CONTINUE_EXECUTION;
+            }
+            const uint64_t rip = ctx->Rip;
+            for (int i = 0; i < maxWriters; i++) {
+                uint64_t expected = 0;
+                if (writerRips[i].load() == rip || writerRips[i].compare_exchange_strong(expected, rip)) {
+                    if (writerCounts[i]++ == 0) {
+                        writerRets[i] = *reinterpret_cast<uint64_t *>(ctx->Rsp); // hint only (not always a return address)
+                    }
+                    break;
+                }
+            }
+            return EXCEPTION_CONTINUE_EXECUTION;
+        }
+
+        void SetBreakpoint1(const uint64_t address) {
+            const auto pid = GetCurrentProcessId();
+            const auto self = GetCurrentThreadId();
+            const auto snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+            if (snap == INVALID_HANDLE_VALUE) {
+                return;
+            }
+            THREADENTRY32 te{};
+            te.dwSize = sizeof(te);
+            for (auto ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
+                if (te.th32OwnerProcessID != pid || te.th32ThreadID == self) {
+                    continue;
+                }
+                const auto th = OpenThread(THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, te.th32ThreadID);
+                if (th == nullptr) {
+                    continue;
+                }
+                if (SuspendThread(th) != static_cast<DWORD>(-1)) {
+                    CONTEXT ctx{};
+                    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+                    if (GetThreadContext(th, &ctx)) {
+                        ctx.Dr1 = address;
+                        ctx.Dr7 = (ctx.Dr7 & ~dr7Mask1) | (address != 0 ? dr7Write4At1 : 0);
+                        SetThreadContext(th, &ctx);
+                    }
+                    ResumeThread(th);
+                }
+                CloseHandle(th);
+            }
+            CloseHandle(snap);
+        }
+
+        uint64_t ToExeAddr(const uint64_t a) {
+            const auto base = reinterpret_cast<uint64_t>(GetModuleHandleW(nullptr));
+            return a >= base && a < base + 0x10000000 ? a - base + 0x140000000 : a;
+        }
+    }
+
+    bool WatchWrites(const uint32_t objectID, const char *why) {
+        uint64_t controller;
+        uint32_t localIndex;
+        if (!Lookup(objectID, controller, localIndex) || watching.load()) {
+            return false;
+        }
+        using GetCharaFunc = void *(__fastcall *)(void *ctrl, uint32_t localIndex);
+        const auto ctrl = reinterpret_cast<void *>(controller);
+        const auto obj = reinterpret_cast<GetCharaFunc>((*reinterpret_cast<void ***>(ctrl))[0x388 / 8])(ctrl, localIndex);
+        if (obj == nullptr) {
+            return false;
+        }
+        if (watchHandle == nullptr) {
+            watchHandle = AddVectoredExceptionHandler(1, WatchHandler);
+        }
+        for (int i = 0; i < maxWriters; i++) {
+            writerRips[i] = 0;
+            writerRets[i] = 0;
+            writerCounts[i] = 0;
+        }
+        watching = true;
+        const auto address = reinterpret_cast<uint64_t>(obj) + 0x20;
+        const std::string reason = why;
+        spdlog::info("[writewatch] soldier {} obj {} ({}): watching writes to its position for 300 ms", objectID, obj, reason);
+        std::thread([objectID, address, reason] {
+            SetBreakpoint1(address);
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            SetBreakpoint1(0);
+            watching = false;
+            for (int i = 0; i < maxWriters; i++) {
+                const auto rip = writerRips[i].load();
+                if (rip == 0) {
+                    break;
+                }
+                spdlog::info("[writewatch] soldier {} ({}): written by {:#x} x{} (stack top {:#x})", objectID, reason, ToExeAddr(rip), writerCounts[i].load(),
+                    ToExeAddr(writerRets[i].load()));
+            }
+            if (writerRips[0].load() == 0) {
+                spdlog::info("[writewatch] soldier {} ({}): no writes", objectID, reason);
+            }
+        }).detach();
+        return true;
+    }
+
+    void DumpCharacter(const uint32_t objectID, const char *why) {
+        uint64_t controller;
+        uint32_t localIndex;
+        if (!Lookup(objectID, controller, localIndex)) {
+            return;
+        }
+        using GetCharaFunc = void *(__fastcall *)(void *ctrl, uint32_t localIndex);
+        const auto ctrl = reinterpret_cast<void *>(controller);
+        const auto obj = static_cast<uint8_t *>(reinterpret_cast<GetCharaFunc>((*reinterpret_cast<void ***>(ctrl))[0x388 / 8])(ctrl, localIndex));
+        if (obj == nullptr) {
+            return;
+        }
+        spdlog::info("[chardump] soldier {} obj {} vtable {:#x} ({})", objectID, (void *)obj, ToExeAddr(*reinterpret_cast<uint64_t *>(obj)), why);
+        for (int off = 0; off < 0x400; off += 0x20) {
+            std::string line;
+            for (int i = 0; i < 0x20; i += 8) {
+                line += fmt::format(" {:016x}", *reinterpret_cast<uint64_t *>(obj + off + i));
+            }
+            spdlog::info("[chardump] soldier {} +{:03x}:{}", objectID, off, line);
+        }
+    }
 
     bool Capture(const uint32_t objectID) {
         uint64_t c;

@@ -30,6 +30,14 @@ namespace Dynamite::SoldierWarp {
 
     // soldier controller of a captured soldier (also its motion controller), 0 if unknown
     uint64_t Controller(uint32_t objectID);
+
+    // research (v29): for 300 ms, log every instruction that writes the soldier's character position (DR1 write
+    // breakpoint on obj+0x20 on all game threads). Returns false if a watch is already running.
+    bool WatchWrites(uint32_t objectID, const char *why);
+
+    // research (v29): hex dump of the soldier's character object (first 0x400 bytes), to compare a body the watcher
+    // put down before with a fresh one
+    void DumpCharacter(uint32_t objectID, const char *why);
 }
 
 #endif // HOOK_SOLDIERWARP_H

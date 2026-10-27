@@ -1,5 +1,6 @@
 #include "BodyFollow.h"
 #include "SteamLobby.h"
+#include <cmath>
 
 #include "SoldierWarp.h"
 #include "DynamiteCore.h"
@@ -195,16 +196,73 @@ namespace Dynamite::BodyFollow {
         }
         std::copy(std::begin(placed), std::end(placed), std::begin(cur));
         havePos = true;
+
+        // v29: character object dump about a second into each follow
+        {
+            static uint32_t dumpedFor = noBody;
+            static double attachedAt = 0;
+            static uint32_t timingFor = noBody;
+            static double lastCall = 0;
+            if (Now() - lastCall > 0.5) {
+                timingFor = noBody; // a new follow (placement paused in between)
+                dumpedFor = noBody;
+            }
+            lastCall = Now();
+            if (timingFor != followID) {
+                timingFor = followID;
+                attachedAt = Now();
+            }
+            if (dumpedFor != followID && Now() - attachedAt > 1.0) {
+                dumpedFor = followID;
+                SoldierWarp::DumpCharacter(followID, "followed, 1 s into the carry");
+            }
+        }
+        // v29: where the soldier is now, compared with where we put it last frame: something else moves it if
+        // these differ (the body stays behind on the screen of the player who put it down before)
+        static uint32_t lastID = noBody;
+        static float lastPlaced[3]{};
+        static bool haveLast = false;
+        static int overwrittenFrames = 0;
+        static double nextWatch = 0;
+        float now[3], nowRot[4];
+        const bool haveNow = SoldierWarp::GetTransform(followID, now, nowRot);
+        float drift = 0;
+        if (haveNow && haveLast && lastID == followID) {
+            const float dx = now[0] - lastPlaced[0], dy = now[1] - lastPlaced[1], dz = now[2] - lastPlaced[2];
+            drift = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (drift > 0.3f) {
+                overwrittenFrames++;
+                if (overwrittenFrames == 3 && Now() >= nextWatch) {
+                    nextWatch = Now() + 10.0;
+                    spdlog::info("BodyFollow, soldier {} is moved back between frames: now {:.2f} {:.2f} {:.2f}, we placed {:.2f} {:.2f} {:.2f}", followID, now[0], now[1], now[2],
+                        lastPlaced[0], lastPlaced[1], lastPlaced[2]);
+                    SoldierWarp::WatchWrites(followID, "moved back while followed");
+                }
+            } else {
+                overwrittenFrames = 0;
+            }
+        }
         {
             static double nextTrace = 0;
             if (Now() >= nextTrace) {
                 nextTrace = Now() + 0.25;
                 auto carrier = DynamiteCore::GetPlayerPosition(g_hook->cfg.Host ? 1 : 0);
-                spdlog::info("BodyFollow, place trace {}: body {:.2f} {:.2f} {:.2f} rot {:.2f} {:.2f} {:.2f} {:.2f} partner {:.2f} {:.2f} {:.2f}", followID, placed[0], placed[1],
-                    placed[2], rot[0], rot[1], rot[2], rot[3], carrier.x, carrier.y, carrier.z);
+                spdlog::info("BodyFollow, place trace {}: body {:.2f} {:.2f} {:.2f} rot {:.2f} {:.2f} {:.2f} {:.2f} partner {:.2f} {:.2f} {:.2f} | was {:.2f} {:.2f} {:.2f} drift {:.2f}",
+                    followID, placed[0], placed[1], placed[2], rot[0], rot[1], rot[2], rot[3], carrier.x, carrier.y, carrier.z, haveNow ? now[0] : 0.0f, haveNow ? now[1] : 0.0f,
+                    haveNow ? now[2] : 0.0f, drift);
             }
         }
-        SoldierWarp::Warp(followID, placed[0], placed[1], placed[2], false, haveRot ? rot : nullptr);
+        const auto res = SoldierWarp::Warp(followID, placed[0], placed[1], placed[2], false, haveRot ? rot : nullptr);
+        if (res != 1) {
+            static double nextLog = 0;
+            if (Now() >= nextLog) {
+                nextLog = Now() + 1.0;
+                spdlog::info("BodyFollow, soldier {} not moved (warp result {})", followID, res);
+            }
+        }
+        lastID = followID;
+        haveLast = res == 1;
+        std::copy(std::begin(placed), std::end(placed), std::begin(lastPlaced));
     }
 
     bool Handles(const uint32_t objectID) { return followID != noBody && followID == objectID && attached; }
