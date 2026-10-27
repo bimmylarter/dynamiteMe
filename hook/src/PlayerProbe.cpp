@@ -809,21 +809,7 @@ namespace Dynamite::PlayerProbe {
         // v28: dead-body research. Which game object types exist (TppCorpse among them?), and the life state of
         // downed soldiers next to a player, every few seconds while someone stands over one.
         {
-            static double nextTypes = 0, nextNear = 0;
-            if (now >= nextTypes) {
-                nextTypes = now + 60.0;
-                std::string types;
-                for (uint32_t type = 0; type < 128; type++) {
-                    int count = 0;
-                    for (uint32_t index = 0; index < 512; index++) {
-                        count += FindGameObjectWithID(type * 512 + index) != nullptr;
-                    }
-                    if (count > 0) {
-                        types += fmt::format(" {}:{}", type, count);
-                    }
-                }
-                spdlog::info("[corpseprobe] game object types (type:count):{}", types);
-            }
+            static double nextNear = 0;
             if (now >= nextNear) {
                 nextNear = now + 2.0;
                 const Vector3 players[2] = {DynamiteCore::GetPlayerPosition(0), DynamiteCore::GetPlayerPosition(1)};

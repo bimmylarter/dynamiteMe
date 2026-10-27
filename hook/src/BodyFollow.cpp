@@ -1,4 +1,5 @@
 #include "BodyFollow.h"
+#include "SteamLobby.h"
 
 #include "SoldierWarp.h"
 #include "DynamiteCore.h"
@@ -168,6 +169,9 @@ namespace Dynamite::BodyFollow {
     double FollowedFor() { return followID == noBody ? 0.0 : Now() - followStart; }
 
     void PlaceAttached() {
+        if (!SteamLobby::MissionRunning()) {
+            return; // v28: never touch soldiers while a mission loads or unloads
+        }
         if (followID == noBody || !attached || PlayerProbe::LocalCarryTarget() == followID) {
             return;
         }

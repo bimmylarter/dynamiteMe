@@ -430,6 +430,11 @@ namespace Dynamite {
     // returns nothing (id == nil) when queue is empty
     // called from TppPlayer.Update on game thread
     int l_PopBodyUpdate(lua_State *L) {
+        // v28: nothing while a mission loads or unloads (the game reports the next mission before its soldiers exist);
+        // body sync starts with the mission
+        if (!SteamLobby::MissionRunning()) {
+            return 0;
+        }
         {
             static uint32_t nextInfo = 0;
             if (GetTickCount() >= nextInfo) {
@@ -473,6 +478,10 @@ namespace Dynamite {
     // Dynamite.CaptureSoldier(gameObjectId) -> true when soldier can be moved with Dynamite.WarpSoldier
     // starts capture otherwise; call again on next frames
     int l_CaptureSoldier(lua_State *L) {
+        if (!SteamLobby::MissionRunning()) {
+            lua_pushboolean(L, false);
+            return 1;
+        }
         const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
         lua_pushboolean(L, SoldierWarp::Capture(objectID));
         return 1;
@@ -480,6 +489,10 @@ namespace Dynamite {
 
     // Dynamite.WarpSoldier(gameObjectId, x, y, z) -> 1 moved, 0 not captured yet, -1 failed
     int l_WarpSoldier(lua_State *L) {
+        if (!SteamLobby::MissionRunning()) {
+            lua_pushinteger(L, 0);
+            return 1;
+        }
         const auto objectID = static_cast<uint32_t>(luaL_checkinteger(L, 1));
         if (BodyFollow::Handles(objectID)) {
             // body follows partner's carry / put-down exactly, the drop position is not needed

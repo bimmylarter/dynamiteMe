@@ -603,6 +603,17 @@ namespace Dynamite::SteamLobby {
         }
     }
 
+    bool MissionRunning() {
+        const auto started = myStarted.load();
+        if (started == 0) {
+            return false;
+        }
+        if (GetTickCount64() - lastLuaTick.load() > 2000) {
+            return true; // no lobby tick (older game scripts): trust the last mission start
+        }
+        return currentMission.load() == started;
+    }
+
     void OnMissionStart(const uint32_t code) {
         myStarted = IsMission(code) ? code : 0;
         if (myStarted.load() != 0) {

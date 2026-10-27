@@ -27,4 +27,8 @@ namespace Dynamite::SteamLobby {
 
     // TppMission.OnMissionStart ran (seen in its Dynamite.Log line)
     void OnMissionStart(uint32_t missionCode);
+
+    // a mission (story or free roam) has started and is still the current one: false in the helicopter and while
+    // a mission is loading or unloading, when soldiers and players are being created or destroyed
+    bool MissionRunning();
 }
